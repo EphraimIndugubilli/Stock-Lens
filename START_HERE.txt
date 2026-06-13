@@ -1,0 +1,18 @@
+STOCK LENS — run it locally
+===========================
+
+No API key. No account. No quota. Just runs.
+
+Need Node.js first (run: node -v  -> v18.18 or higher). Get it at nodejs.org.
+
+In a terminal, inside THIS folder (the one with package.json):
+
+  1. npm install
+  2. npm run dev
+  3. open http://localhost:3000
+
+Type a ticker (RELIANCE, TCS, INFY) and press "Analyze stock".
+
+If port 3000 is busy, Next.js will use 3001 — just open the URL it prints.
+
+Research aid, not investment advice. Trade yourself in Groww.
