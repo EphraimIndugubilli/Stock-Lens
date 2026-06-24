@@ -24,6 +24,26 @@ function smaSeries(c, n) {
   return c.map((_, i) => (i + 1 < n ? null : sma(c.slice(0, i + 1), n)));
 }
 
+function ema(prices, period) {
+  if (prices.length < period) return null;
+  const k = 2 / (period + 1);
+  let val = prices.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < prices.length; i++) val = prices[i] * k + val * (1 - k);
+  return Number(val.toFixed(2));
+}
+
+function bollingerBands(closes, period = 20) {
+  if (closes.length < period) return null;
+  const slice = closes.slice(-period);
+  const mean = slice.reduce((a, b) => a + b, 0) / period;
+  const std = Math.sqrt(slice.reduce((a, b) => a + (b - mean) ** 2, 0) / period);
+  return {
+    upper: Number((mean + 2 * std).toFixed(2)),
+    middle: Number(mean.toFixed(2)),
+    lower: Number((mean - 2 * std).toFixed(2)),
+  };
+}
+
 function downIdx(len, target = 150) {
   if (len <= target) return [...Array(len).keys()];
   const stride = len / target, out = [];
@@ -69,6 +89,8 @@ export async function POST(req) {
     const low52 = Math.min(...closes), high52 = Math.max(...closes);
     const posInRange = high52 > low52 ? Math.round(((price - low52) / (high52 - low52)) * 100) : 50;
     const s50 = sma(closes, 50), s200 = sma(closes, 200), r14 = rsi(closes);
+    const e21 = ema(closes, 21);
+    const bb = bollingerBands(closes);
     const m1 = mom(closes, 21), m3 = mom(closes, 63), m6 = mom(closes, 126);
 
     // descriptive trend
@@ -112,8 +134,10 @@ export async function POST(req) {
 
     const idx = downIdx(closes.length);
     const ma50full = smaSeries(closes, 50);
+    const ma200full = smaSeries(closes, 200);
     const series = idx.map((i) => closes[i]);
     const ma50 = idx.map((i) => ma50full[i]);
+    const ma200 = idx.map((i) => ma200full[i]);
 
     return Response.json({
       name: meta.longName || meta.shortName || sym,
@@ -123,15 +147,19 @@ export async function POST(req) {
       price: fmt(price),
       dayChangePct,
       week52: `${fmt(low52)} – ${fmt(high52)}`,
-      sma50: fmt(s50), sma200: fmt(s200), rsi: r14,
+      sma50: fmt(s50), sma200: fmt(s200), ema21: fmt(e21), rsi: r14,
+      bollingerUpper: bb ? fmt(bb.upper) : null,
+      bollingerMiddle: bb ? fmt(bb.middle) : null,
+      bollingerLower: bb ? fmt(bb.lower) : null,
       posInRange, mom1m: m1, mom3m: m3, mom6m: m6,
       signal: trend, signalColor: trendColor, strength, rationale,
       bull: strengths, bear: concerns, technical, fundamental,
       risks: [
         "Indicators reflect past prices and can reverse quickly.",
         "Single-stock exposure is riskier than a diversified basket.",
+        "This tool shows NSE/BSE price data only — no earnings, no news.",
       ],
-      series, ma50,
+      series, ma50, ma200,
     });
   } catch (e) {
     return Response.json({ error: "Something went wrong fetching the data.", detail: String(e) }, { status: 500 });
