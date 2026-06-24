@@ -183,6 +183,45 @@ export default function StockAdvisor() {
                   </div>
                 ))}
               </div>
+              {/* Stochastic + volume row */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
+                {result.stochastic && (() => {
+                  const s = result.stochastic;
+                  const sColor = s.oversold ? T.pos : s.overbought ? T.neg : T.muted;
+                  return (
+                    <div style={{ background: T.bg, borderRadius: 9, padding: "10px 12px" }}>
+                      <div style={{ fontSize: 11, color: T.muted }}>Stochastic %K / %D</div>
+                      <div style={{ fontFamily: T.mono, fontSize: 13.5, marginTop: 3, color: sColor }}>
+                        {s.k} / {s.d}
+                      </div>
+                      <div style={{ fontSize: 10.5, color: sColor, marginTop: 2 }}>
+                        {s.oversold ? "Oversold" : s.overbought ? "Overbought" : "Neutral"}
+                      </div>
+                    </div>
+                  );
+                })()}
+                {result.volumeTrend && (() => {
+                  const vt = result.volumeTrend;
+                  const vColor = vt.aboveAvg ? (dayUp ? T.pos : T.neg) : T.muted;
+                  const fmtVol = (n) => n >= 1e7 ? (n / 1e7).toFixed(1) + "Cr" : n >= 1e5 ? (n / 1e5).toFixed(1) + "L" : n.toLocaleString();
+                  return (
+                    <div style={{ background: T.bg, borderRadius: 9, padding: "10px 12px" }}>
+                      <div style={{ fontSize: 11, color: T.muted }}>Volume vs 20d avg</div>
+                      <div style={{ fontFamily: T.mono, fontSize: 13.5, marginTop: 3, color: vColor }}>
+                        {vt.ratio}x
+                      </div>
+                      <div style={{ fontSize: 10.5, color: T.muted, marginTop: 2 }}>
+                        Today: {fmtVol(vt.current)}
+                      </div>
+                    </div>
+                  );
+                })()}
+                <div style={{ background: T.bg, borderRadius: 9, padding: "10px 12px" }}>
+                  <div style={{ fontSize: 11, color: T.muted }}>ATR (14d)</div>
+                  <div style={{ fontFamily: T.mono, fontSize: 13.5, marginTop: 3 }}>{result.atr ?? "N/A"}</div>
+                  <div style={{ fontSize: 10.5, color: T.muted, marginTop: 2 }}>avg daily range</div>
+                </div>
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
                 {momCell("1-month", result.mom1m)}{momCell("3-month", result.mom3m)}{momCell("6-month", result.mom6m)}
               </div>

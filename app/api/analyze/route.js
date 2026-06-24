@@ -73,6 +73,40 @@ function bollingerBands(closes, period = 20) {
   };
 }
 
+function stochastic(closes, period = 14) {
+  if (closes.length < period) return null;
+  const slice = closes.slice(-period);
+  const lowest = Math.min(...slice);
+  const highest = Math.max(...slice);
+  if (highest === lowest) return { k: 50, d: 50 };
+  const k = Number((((closes[closes.length - 1] - lowest) / (highest - lowest)) * 100).toFixed(1));
+  // %D is simple 3-period avg of %K (approximate — using last 3 windows)
+  const ks = [];
+  for (let i = 0; i < 3; i++) {
+    const sl = closes.slice(-(period + i), closes.length - i || undefined);
+    if (sl.length < period) break;
+    const lo = Math.min(...sl), hi = Math.max(...sl);
+    if (hi === lo) ks.push(50);
+    else ks.push(((sl[sl.length - 1] - lo) / (hi - lo)) * 100);
+  }
+  const d = Number((ks.reduce((a, b) => a + b, 0) / ks.length).toFixed(1));
+  return { k, d, overbought: k > 80, oversold: k < 20 };
+}
+
+function volumeTrend(volumes) {
+  if (!volumes || volumes.length < 20) return null;
+  const valid = volumes.filter(v => v != null && v > 0);
+  if (valid.length < 20) return null;
+  const avgVol = valid.slice(-20).reduce((a, b) => a + b, 0) / 20;
+  const lastVol = valid[valid.length - 1];
+  return {
+    current: lastVol,
+    avg20: Math.round(avgVol),
+    ratio: Number((lastVol / avgVol).toFixed(2)),
+    aboveAvg: lastVol > avgVol,
+  };
+}
+
 function downIdx(len, target = 150) {
   if (len <= target) return [...Array(len).keys()];
   const stride = len / target, out = [];
@@ -88,7 +122,7 @@ export async function POST(req) {
       return Response.json({ error: "Enter a stock name or NSE ticker." }, { status: 400 });
     const sym = String(symbol).trim().toUpperCase().replace(/\s+/g, "");
 
-    let meta = null, closes = [];
+    let meta = null, closes = [], volumes = [];
     for (const v of [`${sym}.NS`, `${sym}.BO`, sym]) {
       try {
         const r = await fetch(
@@ -98,10 +132,12 @@ export async function POST(req) {
         if (!r.ok) continue;
         const j = await r.json();
         const res = j?.chart?.result?.[0];
-        const c = res?.indicators?.quote?.[0]?.close;
+        const quote = res?.indicators?.quote?.[0];
+        const c = quote?.close;
         if (res?.meta?.regularMarketPrice && Array.isArray(c)) {
           meta = res.meta;
           closes = c.filter((x) => x != null);
+          volumes = (quote?.volume || []).filter((x) => x != null);
           break;
         }
       } catch {}
@@ -126,6 +162,8 @@ export async function POST(req) {
     const atrVal = atr(closes);
     const bb = bollingerBands(closes);
     const m1 = mom(closes, 21), m3 = mom(closes, 63), m6 = mom(closes, 126);
+    const stoch = stochastic(closes);
+    const volTrend = volumeTrend(volumes);
 
     // Trend determination
     let trend = "Range-bound", trendColor = "warn";
@@ -153,6 +191,10 @@ export async function POST(req) {
     if (posInRange >= 85) concerns.push("Trading near the top of its 52-week range.");
     if (macdResult && !macdResult.bullish) concerns.push("MACD below signal line — short-term momentum bearish.");
     if (bb && price > bb.upper) concerns.push("Price above upper Bollinger Band — potential pullback zone.");
+    if (stoch?.oversold) strengths.push(`Stochastic %K at ${stoch.k} — oversold territory, potential bounce.`);
+    if (stoch?.overbought) concerns.push(`Stochastic %K at ${stoch.k} — overbought, watch for reversal.`);
+    if (volTrend?.aboveAvg && dayChangePct > 0) strengths.push(`Volume ${volTrend.ratio}x the 20-day average on an up day — institutional interest.`);
+    if (volTrend?.aboveAvg && dayChangePct < 0) concerns.push(`Volume ${volTrend.ratio}x the 20-day average on a down day — heavy selling pressure.`);
 
     if (!strengths.length) strengths.push("No standout positive signals right now.");
     if (!concerns.length) concerns.push("No major technical red flags right now.");
@@ -208,6 +250,9 @@ export async function POST(req) {
         "This tool shows NSE/BSE price data only — no earnings, no news.",
       ],
       series, ma50, ma200,
+      stochastic: stoch,
+      volumeTrend: volTrend,
+      volumes: idx.map((i) => volumes[i] ?? null),
     });
   } catch (e) {
     return Response.json({ error: "Something went wrong fetching the data.", detail: String(e) }, { status: 500 });
