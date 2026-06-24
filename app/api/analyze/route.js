@@ -15,6 +15,43 @@ function rsi(closes, period = 14) {
   return Math.round(100 - 100 / (1 + ag / al));
 }
 
+function ema(prices, period) {
+  if (prices.length < period) return null;
+  const k = 2 / (period + 1);
+  let val = prices.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < prices.length; i++) val = prices[i] * k + val * (1 - k);
+  return Number(val.toFixed(2));
+}
+
+function macd(prices) {
+  if (prices.length < 35) return null;
+  const ema12 = ema(prices, 12);
+  const ema26 = ema(prices, 26);
+  if (ema12 == null || ema26 == null) return null;
+  const macdLine = ema12 - ema26;
+  const history = [];
+  for (let i = 26; i <= prices.length; i++) {
+    const e12 = ema(prices.slice(0, i), 12);
+    const e26 = ema(prices.slice(0, i), 26);
+    if (e12 != null && e26 != null) history.push(e12 - e26);
+  }
+  const signal = ema(history, 9);
+  if (signal == null) return null;
+  return {
+    macd: Number(macdLine.toFixed(4)),
+    signal: Number(signal.toFixed(4)),
+    histogram: Number((macdLine - signal).toFixed(4)),
+    bullish: macdLine > signal,
+  };
+}
+
+function atr(prices, period = 14) {
+  if (prices.length < period + 1) return null;
+  const recent = prices.slice(-(period + 1));
+  const sumTR = recent.slice(1).reduce((sum, p, i) => sum + Math.abs(p - recent[i]), 0);
+  return Number((sumTR / period).toFixed(4));
+}
+
 const mom = (c, days) => {
   if (c.length <= days) return null;
   return Number((((c[c.length - 1] - c[c.length - 1 - days]) / c[c.length - 1 - days]) * 100).toFixed(1));
@@ -22,14 +59,6 @@ const mom = (c, days) => {
 
 function smaSeries(c, n) {
   return c.map((_, i) => (i + 1 < n ? null : sma(c.slice(0, i + 1), n)));
-}
-
-function ema(prices, period) {
-  if (prices.length < period) return null;
-  const k = 2 / (period + 1);
-  let val = prices.slice(0, period).reduce((a, b) => a + b, 0) / period;
-  for (let i = period; i < prices.length; i++) val = prices[i] * k + val * (1 - k);
-  return Number(val.toFixed(2));
 }
 
 function bollingerBands(closes, period = 20) {
@@ -60,7 +89,7 @@ export async function POST(req) {
     const sym = String(symbol).trim().toUpperCase().replace(/\s+/g, "");
 
     let meta = null, closes = [];
-    for (const v of [`${sym}.NS`, `${sym}.BO`]) {
+    for (const v of [`${sym}.NS`, `${sym}.BO`, sym]) {
       try {
         const r = await fetch(
           `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(v)}?range=1y&interval=1d`,
@@ -78,7 +107,7 @@ export async function POST(req) {
       } catch {}
     }
     if (!meta || closes.length < 20)
-      return Response.json({ error: `Couldn't find price history for "${sym}". Try the NSE ticker, e.g. RELIANCE.` }, { status: 404 });
+      return Response.json({ error: `Couldn't find price history for "${sym}". Try the exact NSE ticker, e.g. RELIANCE, INFY, TCS.` }, { status: 404 });
 
     const cur = meta.currency === "INR" ? "₹" : (meta.currency ? meta.currency + " " : "");
     const fmt = (n) => (n == null ? "N/A" : cur + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 }));
@@ -88,12 +117,17 @@ export async function POST(req) {
     const dayChangePct = prev ? Number((((price - prev) / prev) * 100).toFixed(2)) : 0;
     const low52 = Math.min(...closes), high52 = Math.max(...closes);
     const posInRange = high52 > low52 ? Math.round(((price - low52) / (high52 - low52)) * 100) : 50;
-    const s50 = sma(closes, 50), s200 = sma(closes, 200), r14 = rsi(closes);
+
+    const s50 = sma(closes, 50);
+    const s200 = sma(closes, 200);
+    const r14 = rsi(closes);
     const e21 = ema(closes, 21);
+    const macdResult = macd(closes);
+    const atrVal = atr(closes);
     const bb = bollingerBands(closes);
     const m1 = mom(closes, 21), m3 = mom(closes, 63), m6 = mom(closes, 126);
 
-    // descriptive trend
+    // Trend determination
     let trend = "Range-bound", trendColor = "warn";
     if (s50 && s200) {
       if (price > s50 && s50 > s200) { trend = "Uptrend"; trendColor = "pos"; }
@@ -103,34 +137,46 @@ export async function POST(req) {
       trendColor = price > s50 ? "pos" : "neg";
     }
 
-    // strengths / watch-outs from rules
     const strengths = [], concerns = [];
     if (s200 && price > s200) strengths.push("Above the 200-day average — long-term trend intact.");
     if (s50 && price > s50) strengths.push("Above the 50-day average — near-term momentum positive.");
     if (m3 != null && m3 > 0) strengths.push(`Up ${m3}% over the last three months.`);
     if (r14 != null && r14 <= 30) strengths.push("RSI oversold (<30) — historically a rebound zone.");
-    if (posInRange <= 25) strengths.push("Trading near the low of its 52-week range.");
+    if (posInRange <= 25) strengths.push("Trading near the low of its 52-week range — potential value zone.");
+    if (macdResult?.bullish) strengths.push("MACD above signal line — short-term momentum turning bullish.");
+    if (bb && price < bb.lower) strengths.push("Price below lower Bollinger Band — mean reversion candidate.");
+
     if (s200 && price < s200) concerns.push("Below the 200-day average — long-term trend weak.");
-    if (s50 && price < s50) concerns.push("Below the 50-day average.");
+    if (s50 && price < s50) concerns.push("Below the 50-day average — near-term momentum negative.");
     if (m3 != null && m3 < 0) concerns.push(`Down ${Math.abs(m3)}% over the last three months.`);
     if (r14 != null && r14 >= 70) concerns.push("RSI overbought (>70) — price looks stretched.");
     if (posInRange >= 85) concerns.push("Trading near the top of its 52-week range.");
+    if (macdResult && !macdResult.bullish) concerns.push("MACD below signal line — short-term momentum bearish.");
+    if (bb && price > bb.upper) concerns.push("Price above upper Bollinger Band — potential pullback zone.");
+
     if (!strengths.length) strengths.push("No standout positive signals right now.");
     if (!concerns.length) concerns.push("No major technical red flags right now.");
 
-    // signal strength = how one-directional the indicators are (honest, not a probability)
-    const strength = Math.round((Math.max(strengths.length, concerns.length) /
-      (strengths.length + concerns.length)) * 100);
+    const strength = Math.round(
+      (Math.max(strengths.length, concerns.length) / (strengths.length + concerns.length)) * 100
+    );
 
     const rationale =
       trend === "Uptrend" ? "Price sits above both key averages with positive momentum — a constructive technical setup."
       : trend === "Downtrend" ? "Price sits below both key averages — the technical picture is currently weak."
       : "Mixed signals: the stock is consolidating without a clear directional edge.";
 
+    const macdSummary = macdResult
+      ? `MACD ${macdResult.macd > 0 ? "positive" : "negative"} (histogram ${macdResult.histogram > 0 ? "+" : ""}${macdResult.histogram}) — momentum ${macdResult.bullish ? "bullish" : "bearish"}. `
+      : "";
+
     const technical = `${trend}. ${
       r14 != null ? `RSI ${r14} (${r14 >= 70 ? "overbought" : r14 <= 30 ? "oversold" : "neutral"}). ` : ""
-    }Sitting ${posInRange}% up its 52-week range.`;
-    const fundamental = `50-day average ${fmt(s50)}, 200-day average ${fmt(s200)}. (Computed from price history; this tool doesn't pull earnings data — check fundamentals in Groww.)`;
+    }${macdSummary}Sitting ${posInRange}% up its 52-week range.${
+      atrVal != null ? ` ATR ${fmt(atrVal)} — ${atrVal > price * 0.03 ? "high" : "moderate"} daily volatility.` : ""
+    }`;
+
+    const fundamental = `50-day avg ${fmt(s50)}, 200-day avg ${fmt(s200)}, EMA-21 ${fmt(e21)}. Bollinger Bands: ${bb ? `${fmt(bb.lower)} – ${fmt(bb.upper)}` : "N/A"}. (This tool shows price data only — check Groww for earnings & fundamentals.)`;
 
     const idx = downIdx(closes.length);
     const ma50full = smaSeries(closes, 50);
@@ -148,6 +194,8 @@ export async function POST(req) {
       dayChangePct,
       week52: `${fmt(low52)} – ${fmt(high52)}`,
       sma50: fmt(s50), sma200: fmt(s200), ema21: fmt(e21), rsi: r14,
+      macd: macdResult,
+      atr: atrVal,
       bollingerUpper: bb ? fmt(bb.upper) : null,
       bollingerMiddle: bb ? fmt(bb.middle) : null,
       bollingerLower: bb ? fmt(bb.lower) : null,
