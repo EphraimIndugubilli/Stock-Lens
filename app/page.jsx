@@ -183,6 +183,30 @@ export default function StockAdvisor() {
                   </div>
                 ))}
               </div>
+              {/* MACD row */}
+              {result.macd && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
+                  <div style={{ background: T.bg, borderRadius: 9, padding: "10px 12px" }}>
+                    <div style={{ fontSize: 11, color: T.muted }}>MACD Line</div>
+                    <div style={{ fontFamily: T.mono, fontSize: 13.5, marginTop: 3, color: result.macd.bullish ? T.pos : T.neg }}>
+                      {result.macd.macd}
+                    </div>
+                    <div style={{ fontSize: 10.5, color: result.macd.bullish ? T.pos : T.neg, marginTop: 2 }}>
+                      {result.macd.bullish ? "Bullish" : "Bearish"}
+                    </div>
+                  </div>
+                  <div style={{ background: T.bg, borderRadius: 9, padding: "10px 12px" }}>
+                    <div style={{ fontSize: 11, color: T.muted }}>Signal Line</div>
+                    <div style={{ fontFamily: T.mono, fontSize: 13.5, marginTop: 3 }}>{result.macd.signal}</div>
+                  </div>
+                  <div style={{ background: T.bg, borderRadius: 9, padding: "10px 12px" }}>
+                    <div style={{ fontSize: 11, color: T.muted }}>MACD Histogram</div>
+                    <div style={{ fontFamily: T.mono, fontSize: 13.5, marginTop: 3, color: result.macd.histogram >= 0 ? T.pos : T.neg }}>
+                      {result.macd.histogram >= 0 ? "+" : ""}{result.macd.histogram}
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* Stochastic + volume row */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
                 {result.stochastic && (() => {
