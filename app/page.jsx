@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Search, TrendingUp, TrendingDown, Minus, AlertTriangle,
   ArrowUpRight, ArrowDownRight, Loader2, Building2,
@@ -67,6 +67,18 @@ export default function StockAdvisor() {
   const [history, setHistory] = useState(() => {
     try { return JSON.parse(localStorage.getItem("sl_history") || "[]"); } catch { return []; }
   });
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (e.key === "/" && document.activeElement !== inputRef.current) {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   async function analyze(sym) {
     const q = (sym || symbol).trim();
@@ -118,10 +130,13 @@ export default function StockAdvisor() {
         </header>
 
         <div className="sa-card" style={{ padding: 18 }}>
-          <label style={{ fontSize: 12, fontWeight: 600, color: T.muted, textTransform: "uppercase", letterSpacing: ".05em" }}>Company or NSE ticker</label>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: T.muted, textTransform: "uppercase", letterSpacing: ".05em" }}>Company or NSE ticker</label>
+            <kbd style={{ fontSize: 11, color: T.muted, background: T.bg, border: `1px solid ${T.line}`, borderRadius: 4, padding: "1px 5px", fontFamily: T.mono }}>press / to search</kbd>
+          </div>
           <div style={{ position: "relative", marginTop: 8 }}>
             <Search size={17} color={T.muted} style={{ position: "absolute", left: 12, top: 13 }} />
-            <input className="sa-in" value={symbol} onChange={(e) => setSymbol(e.target.value)}
+            <input ref={inputRef} className="sa-in" value={symbol} onChange={(e) => setSymbol(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && analyze()} placeholder="e.g. RELIANCE, TCS, INFY"
               style={{ width: "100%", padding: "11px 12px 11px 36px", border: `1px solid ${T.line}`, borderRadius: 10, fontFamily: T.body, fontSize: 14.5, background: T.bg, color: T.ink }} />
           </div>
