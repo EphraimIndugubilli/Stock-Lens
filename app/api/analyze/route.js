@@ -107,6 +107,34 @@ function volumeTrend(volumes) {
   };
 }
 
+function onBalanceVolume(closes, volumes) {
+  if (!volumes || volumes.length < 2 || closes.length < 2) return null;
+  const len = Math.min(closes.length, volumes.length);
+  const series = [volumes[0] ?? 0];
+  for (let i = 1; i < len; i++) {
+    const prev = series[series.length - 1];
+    const vol = volumes[i] ?? 0;
+    if (closes[i] > closes[i - 1]) series.push(prev + vol);
+    else if (closes[i] < closes[i - 1]) series.push(prev - vol);
+    else series.push(prev);
+  }
+  const current = series[series.length - 1];
+  const ema10 = ema(series, 10);
+  const ema20 = ema(series, 20);
+  let trend = 'neutral';
+  if (ema10 != null && ema20 != null) {
+    trend = ema10 > ema20 * 1.002 ? 'rising' : ema10 < ema20 * 0.998 ? 'falling' : 'neutral';
+  }
+  const abs = Math.abs(current);
+  const sign = current < 0 ? '-' : '+';
+  const fmt =
+    abs >= 1e9 ? sign + (abs / 1e9).toFixed(2) + 'B' :
+    abs >= 1e6 ? sign + (abs / 1e6).toFixed(2) + 'M' :
+    abs >= 1e3 ? sign + (abs / 1e3).toFixed(1) + 'K' :
+    String(Math.round(current));
+  return { current, formatted: fmt, trend };
+}
+
 function downIdx(len, target = 150) {
   if (len <= target) return [...Array(len).keys()];
   const stride = len / target, out = [];
@@ -164,6 +192,7 @@ export async function POST(req) {
     const m1 = mom(closes, 21), m3 = mom(closes, 63), m6 = mom(closes, 126);
     const stoch = stochastic(closes);
     const volTrend = volumeTrend(volumes);
+    const obvResult = onBalanceVolume(closes, volumes);
 
     // Trend determination
     let trend = "Range-bound", trendColor = "warn";
@@ -195,6 +224,8 @@ export async function POST(req) {
     if (stoch?.overbought) concerns.push(`Stochastic %K at ${stoch.k} — overbought, watch for reversal.`);
     if (volTrend?.aboveAvg && dayChangePct > 0) strengths.push(`Volume ${volTrend.ratio}x the 20-day average on an up day — institutional interest.`);
     if (volTrend?.aboveAvg && dayChangePct < 0) concerns.push(`Volume ${volTrend.ratio}x the 20-day average on a down day — heavy selling pressure.`);
+    if (obvResult?.trend === 'rising') strengths.push('OBV (On-Balance Volume) trending up — cumulative buying pressure confirmed.');
+    if (obvResult?.trend === 'falling') concerns.push('OBV (On-Balance Volume) trending down — cumulative selling pressure detected.');
 
     if (!strengths.length) strengths.push("No standout positive signals right now.");
     if (!concerns.length) concerns.push("No major technical red flags right now.");
@@ -252,6 +283,7 @@ export async function POST(req) {
       series, ma50, ma200,
       stochastic: stoch,
       volumeTrend: volTrend,
+      obv: obvResult,
       volumes: idx.map((i) => volumes[i] ?? null),
     });
   } catch (e) {

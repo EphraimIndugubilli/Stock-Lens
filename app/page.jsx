@@ -264,6 +264,29 @@ export default function StockAdvisor() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
                 {momCell("1-month", result.mom1m)}{momCell("3-month", result.mom3m)}{momCell("6-month", result.mom6m)}
               </div>
+              {result.obv && (() => {
+                const obvColor = result.obv.trend === 'rising' ? T.pos : result.obv.trend === 'falling' ? T.neg : T.muted;
+                const trendLabel = result.obv.trend === 'rising' ? 'Accumulation ↑' : result.obv.trend === 'falling' ? 'Distribution ↓' : 'Neutral →';
+                return (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
+                    <div style={{ background: T.bg, borderRadius: 9, padding: "10px 12px", gridColumn: "1 / -1" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 11, color: T.muted }}>OBV — On-Balance Volume</div>
+                          <div style={{ fontFamily: T.mono, fontSize: 15, marginTop: 3, color: obvColor }}>{result.obv.formatted}</div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, background: obvColor + "18", borderRadius: 7, padding: "5px 10px" }}>
+                          <Gauge size={13} color={obvColor} />
+                          <span style={{ fontSize: 12, fontWeight: 600, color: obvColor }}>{trendLabel}</span>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>
+                        Cumulative volume flow — rising OBV confirms buying pressure; falling signals distribution.
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
               <div style={{ fontSize: 11, color: T.muted, marginTop: 12, fontStyle: "italic" }}>{result.asOf} · prices may be delayed</div>
             </div>
 
