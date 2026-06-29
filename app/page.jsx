@@ -228,6 +228,26 @@ export default function StockAdvisor() {
                     <div style={{ fontFamily: T.mono, fontSize: 13.5, marginTop: 3 }}>{v}</div>
                   </div>
                 ))}
+                {result.vwap && (
+                  <div style={{ background: T.bg, borderRadius: 9, padding: "10px 12px", gridColumn: "1 / -1" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: T.muted }}>VWAP (20d) — Volume-Weighted Avg Price</div>
+                        <div style={{ fontFamily: T.mono, fontSize: 15, marginTop: 3, color: result.vwapAbove ? T.pos : T.neg }}>
+                          {result.vwap}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, background: (result.vwapAbove ? T.pos : T.neg) + "18", borderRadius: 7, padding: "5px 10px" }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: result.vwapAbove ? T.pos : T.neg }}>
+                          {result.vwapAbove ? "Price above VWAP ↑" : "Price below VWAP ↓"}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>
+                      VWAP weights each day&apos;s price by volume — the true average cost. Price above = institutional demand confirmed; below = distribution.
+                    </div>
+                  </div>
+                )}
               </div>
               {/* MACD row */}
               {result.macd && (

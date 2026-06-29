@@ -135,6 +135,22 @@ function onBalanceVolume(closes, volumes) {
   return { current, formatted: fmt, trend };
 }
 
+// Rolling 20-period VWAP (Volume-Weighted Average Price).
+// Uses close as the typical price — a standard daily approximation.
+// Price above VWAP = institutional demand; below = distribution pressure.
+function rollingVwap(closes, volumes, period = 20) {
+  const len = Math.min(closes.length, volumes.length);
+  if (len < period) return null;
+  let sumCV = 0, sumVol = 0;
+  for (let i = len - period; i < len; i++) {
+    const vol = volumes[i] ?? 0;
+    sumCV += closes[i] * vol;
+    sumVol += vol;
+  }
+  if (sumVol === 0) return null;
+  return Number((sumCV / sumVol).toFixed(2));
+}
+
 function downIdx(len, target = 150) {
   if (len <= target) return [...Array(len).keys()];
   const stride = len / target, out = [];
@@ -193,6 +209,7 @@ export async function POST(req) {
     const stoch = stochastic(closes);
     const volTrend = volumeTrend(volumes);
     const obvResult = onBalanceVolume(closes, volumes);
+    const vwapRaw = rollingVwap(closes, volumes);
 
     // Trend determination
     let trend = "Range-bound", trendColor = "warn";
@@ -226,6 +243,8 @@ export async function POST(req) {
     if (volTrend?.aboveAvg && dayChangePct < 0) concerns.push(`Volume ${volTrend.ratio}x the 20-day average on a down day — heavy selling pressure.`);
     if (obvResult?.trend === 'rising') strengths.push('OBV (On-Balance Volume) trending up — cumulative buying pressure confirmed.');
     if (obvResult?.trend === 'falling') concerns.push('OBV (On-Balance Volume) trending down — cumulative selling pressure detected.');
+    if (vwapRaw !== null && price > vwapRaw) strengths.push(`Price above 20-day VWAP (${fmt(vwapRaw)}) — volume-weighted consensus favours buyers.`);
+    if (vwapRaw !== null && price <= vwapRaw) concerns.push(`Price below 20-day VWAP (${fmt(vwapRaw)}) — sellers dominate the volume-weighted average.`);
 
     if (!strengths.length) strengths.push("No standout positive signals right now.");
     if (!concerns.length) concerns.push("No major technical red flags right now.");
@@ -284,6 +303,8 @@ export async function POST(req) {
       stochastic: stoch,
       volumeTrend: volTrend,
       obv: obvResult,
+      vwap: vwapRaw != null ? fmt(vwapRaw) : null,
+      vwapAbove: vwapRaw != null ? price > vwapRaw : null,
       volumes: idx.map((i) => volumes[i] ?? null),
     });
   } catch (e) {
