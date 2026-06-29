@@ -59,6 +59,31 @@ function PriceChart({ series, ma50, ma200 }) {
   );
 }
 
+function VolumeChart({ volumes, series }) {
+  const W = 700, H = 52, pad = 10, n = volumes.length;
+  if (n < 2) return null;
+  const valid = volumes.filter(Boolean);
+  if (!valid.length) return null;
+  const maxVol = Math.max(...valid);
+  const barW = (W - 2 * pad) / n;
+  const up = series[n - 1] >= series[0];
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }} preserveAspectRatio="none">
+      {volumes.map((v, i) => {
+        if (v == null || v === 0) return null;
+        const bH = Math.max(1, (v / maxVol) * (H - pad));
+        const bX = pad + i * barW;
+        const bY = H - bH;
+        const isUp = series[i] != null && i > 0 && series[i] >= (series[i - 1] ?? series[i]);
+        return (
+          <rect key={i} x={bX} y={bY} width={Math.max(1, barW - 0.5)} height={bH}
+            fill={isUp ? T.pos : T.neg} opacity="0.55" />
+        );
+      })}
+    </svg>
+  );
+}
+
 export default function StockAdvisor() {
   const [symbol, setSymbol] = useState("");
   const [loading, setLoading] = useState(false);
@@ -176,10 +201,16 @@ export default function StockAdvisor() {
                   </div>
                 </div>
               </div>
-              <div style={{ marginTop: 16, border: `1px solid ${T.line}`, borderRadius: 10, padding: "10px 8px 6px", background: "#FCFDFC" }}>
+              <div style={{ marginTop: 16, border: `1px solid ${T.line}`, borderRadius: 10, padding: "10px 8px 4px", background: "#FCFDFC" }}>
                 <PriceChart series={result.series} ma50={result.ma50} ma200={result.ma200} />
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "2px 6px 0", fontSize: 10.5, color: T.muted }}>
-                  <span>1 year</span>
+                {result.volumes && result.volumes.some(Boolean) && (
+                  <>
+                    <div style={{ borderTop: `1px solid ${T.line}`, margin: "4px 0 2px", opacity: 0.5 }} />
+                    <VolumeChart volumes={result.volumes} series={result.series} />
+                  </>
+                )}
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "2px 6px 2px", fontSize: 10.5, color: T.muted }}>
+                  <span>1 year{result.volumes && result.volumes.some(Boolean) ? " · incl. volume" : ""}</span>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 14, height: 2, background: T.accent, display: "inline-block" }} /> price</span>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 14, borderTop: `2px dashed ${T.warn}` }} /> 50d</span>
