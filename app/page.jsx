@@ -93,6 +93,7 @@ export default function StockAdvisor() {
     try { return JSON.parse(localStorage.getItem("sl_history") || "[]"); } catch { return []; }
   });
   const inputRef = useRef(null);
+  const abortRef = useRef(null);
 
   useEffect(() => {
     function onKeyDown(e) {
@@ -108,11 +109,19 @@ export default function StockAdvisor() {
   async function analyze(sym) {
     const q = (sym || symbol).trim();
     if (!q) { setError("Enter a stock name or NSE ticker to begin."); return; }
+
+    // Cancel any in-flight search so a slow earlier request can't
+    // clobber the result of a newer one (e.g. searching RELIANCE then
+    // quickly searching TCS before the first response arrives).
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true); setError(""); setResult(null);
     try {
       const res = await fetch("/api/analyze", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol: q }),
+        body: JSON.stringify({ symbol: q }), signal: controller.signal,
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || "failed");
@@ -123,8 +132,11 @@ export default function StockAdvisor() {
         return next;
       });
     } catch (e) {
+      if (e.name === "AbortError") return; // superseded by a newer search — ignore
       setError(e.message && e.message !== "failed" ? e.message : "Couldn't load the data. Try again.");
-    } finally { setLoading(false); }
+    } finally {
+      if (abortRef.current === controller) { setLoading(false); abortRef.current = null; }
+    }
   }
 
   const trend = result ? (TREND[result.signal] || TREND["Range-bound"]) : null;
