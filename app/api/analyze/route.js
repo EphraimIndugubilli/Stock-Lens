@@ -151,6 +151,28 @@ function rollingVwap(closes, volumes, period = 20) {
   return Number((sumCV / sumVol).toFixed(2));
 }
 
+// 2026 quant best practice: don't trust any single oscillator — only flag a
+// strong signal when a majority of independent indicators agree on direction.
+// Checks RSI, MACD, Stochastic, OBV and VWAP and counts how many vote bullish
+// vs bearish.
+function confluenceScore({ rsi, macd, stoch, obv, price, vwap }) {
+  const votes = [];
+  if (rsi != null) votes.push(rsi < 50 ? "bull" : rsi > 50 ? "bear" : null);
+  if (macd) votes.push(macd.bullish ? "bull" : "bear");
+  if (stoch) votes.push(stoch.k < 50 ? "bull" : stoch.k > 50 ? "bear" : null);
+  if (obv) votes.push(obv.trend === "rising" ? "bull" : obv.trend === "falling" ? "bear" : null);
+  if (vwap != null) votes.push(price > vwap ? "bull" : "bear");
+
+  const cast = votes.filter(Boolean);
+  const bullCount = cast.filter((v) => v === "bull").length;
+  const bearCount = cast.filter((v) => v === "bear").length;
+  const total = cast.length;
+  const direction = bullCount > bearCount ? "bullish" : bearCount > bullCount ? "bearish" : "mixed";
+  const score = Math.max(bullCount, bearCount);
+
+  return { score, total, direction, bullCount, bearCount, aligned: total > 0 && score / total >= 0.6 };
+}
+
 function downIdx(len, target = 150) {
   if (len <= target) return [...Array(len).keys()];
   const stride = len / target, out = [];
@@ -270,6 +292,8 @@ export async function POST(req) {
 
     const fundamental = `50-day avg ${fmt(s50)}, 200-day avg ${fmt(s200)}, EMA-21 ${fmt(e21)}. Bollinger Bands: ${bb ? `${fmt(bb.lower)} – ${fmt(bb.upper)}` : "N/A"}. (This tool shows price data only — check Groww for earnings & fundamentals.)`;
 
+    const confluence = confluenceScore({ rsi: r14, macd: macdResult, stoch, obv: obvResult, price, vwap: vwapRaw });
+
     const idx = downIdx(closes.length);
     const ma50full = smaSeries(closes, 50);
     const ma200full = smaSeries(closes, 200);
@@ -303,6 +327,7 @@ export async function POST(req) {
       stochastic: stoch,
       volumeTrend: volTrend,
       obv: obvResult,
+      confluence,
       vwap: vwapRaw != null ? fmt(vwapRaw) : null,
       vwapAbove: vwapRaw != null ? price > vwapRaw : null,
       volumes: idx.map((i) => volumes[i] ?? null),

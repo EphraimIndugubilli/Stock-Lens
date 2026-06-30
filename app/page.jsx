@@ -353,6 +353,35 @@ export default function StockAdvisor() {
               <div style={{ fontSize: 11, color: T.muted, marginTop: 12, fontStyle: "italic" }}>{result.asOf} · prices may be delayed</div>
             </div>
 
+            {/* Confluence score — how many indicators (RSI, MACD, Stochastic, OBV, VWAP) agree */}
+            {result.confluence && (() => {
+              const c = result.confluence;
+              const cColor = c.direction === "bullish" ? T.pos : c.direction === "bearish" ? T.neg : T.warn;
+              return (
+                <div className="sa-card" style={{ padding: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7, fontWeight: 600, fontSize: 13.5 }}>
+                      <Gauge size={16} color={T.accent} /> Indicator confluence
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, background: cColor + "18", borderRadius: 7, padding: "5px 10px" }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: cColor }}>
+                        {c.score}/{c.total} aligned {c.direction}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ height: 6, background: T.bg, borderRadius: 4, overflow: "hidden", display: "flex" }}>
+                    <div style={{ width: `${c.total ? (c.bullCount / c.total) * 100 : 0}%`, height: "100%", background: T.pos }} />
+                    <div style={{ width: `${c.total ? (c.bearCount / c.total) * 100 : 0}%`, height: "100%", background: T.neg }} />
+                  </div>
+                  <p style={{ fontSize: 11, color: T.muted, marginTop: 8, marginBottom: 0 }}>
+                    {c.aligned
+                      ? `RSI, MACD, Stochastic, OBV and VWAP mostly agree — a stronger ${c.direction} read.`
+                      : "Indicators are split — no strong directional consensus right now."}
+                  </p>
+                </div>
+              );
+            })()}
+
             {/* Trend read (was the AI signal card) */}
             {trend && (
               <div className="sa-card" style={{ padding: 18, borderLeft: `4px solid ${tColor}` }}>
