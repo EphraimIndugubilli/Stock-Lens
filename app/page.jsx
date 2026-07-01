@@ -261,6 +261,40 @@ export default function StockAdvisor() {
                   </div>
                 )}
               </div>
+              {/* BB Squeeze — 2026 breakout-coiling detector */}
+              {result.bbSqueeze && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ background: result.bbSqueeze.squeeze ? "#BA751718" : T.bg, border: `1px solid ${result.bbSqueeze.squeeze ? T.warn : T.line}`, borderRadius: 9, padding: "12px 14px" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: T.muted }}>Bollinger Band Squeeze</div>
+                        <div style={{ fontFamily: T.mono, fontSize: 15, marginTop: 3, color: result.bbSqueeze.squeeze ? T.warn : T.muted }}>
+                          {result.bbSqueeze.squeeze ? `Squeeze active — ${result.bbSqueeze.intensity}% below avg` : "No squeeze — bands normal"}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, background: (result.bbSqueeze.squeeze ? T.warn : T.muted) + "18", borderRadius: 7, padding: "5px 10px" }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: result.bbSqueeze.squeeze ? T.warn : T.muted }}>
+                          {result.bbSqueeze.squeeze ? "⚡ Breakout Coiling" : "Volatility Normal"}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: T.muted, marginBottom: 3 }}>
+                        <span>Current BW: {result.bbSqueeze.currentBandwidth.toFixed(2)}%</span>
+                        <span>40d Avg: {result.bbSqueeze.avgBandwidth.toFixed(2)}%</span>
+                      </div>
+                      <div style={{ height: 5, background: T.line, borderRadius: 4, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${Math.min(100, (result.bbSqueeze.currentBandwidth / result.bbSqueeze.avgBandwidth) * 100)}%`, background: result.bbSqueeze.squeeze ? T.warn : T.accent, borderRadius: 4, transition: "width 0.4s" }} />
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>
+                      {result.bbSqueeze.squeeze
+                        ? "Bands narrowing signals a volatility contraction (squeeze). Historically, squeezes precede large directional moves — confirm with MACD and OBV for direction."
+                        : "Bands at normal width — no squeeze. Watch for a contraction below the 40-day average bandwidth for an early breakout warning."}
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* MACD row */}
               {result.macd && (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>

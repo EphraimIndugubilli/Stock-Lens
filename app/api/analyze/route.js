@@ -70,6 +70,36 @@ function bollingerBands(closes, period = 20) {
     upper: Number((mean + 2 * std).toFixed(2)),
     middle: Number(mean.toFixed(2)),
     lower: Number((mean - 2 * std).toFixed(2)),
+    bandwidth: mean > 0 ? Number(((4 * std) / mean * 100).toFixed(4)) : 0,
+  };
+}
+
+// Bollinger Band Squeeze — the hottest breakout signal in 2026 quant circles.
+// Bands narrow (low bandwidth) before explosive moves, since volatility cycles
+// from contraction to expansion. Squeeze = current bandwidth below its own
+// rolling average, signalling that a big move is coiling.
+function bollingerSqueeze(closes, period = 20, lookback = 40) {
+  if (closes.length < period + lookback) return null;
+  const bwHistory = [];
+  for (let i = period; i <= closes.length; i++) {
+    const sl = closes.slice(i - period, i);
+    const m  = sl.reduce((a, b) => a + b, 0) / period;
+    const sd = Math.sqrt(sl.reduce((a, b) => a + (b - m) ** 2, 0) / period);
+    if (m > 0) bwHistory.push((4 * sd) / m * 100);
+  }
+  if (bwHistory.length < lookback) return null;
+  const recent   = bwHistory.slice(-lookback);
+  const avgBw    = recent.reduce((a, b) => a + b, 0) / recent.length;
+  const currentBw = recent[recent.length - 1];
+  const minBw    = Math.min(...recent);
+  const squeeze  = currentBw < avgBw * 0.85;
+  const intensity = squeeze ? Math.round((1 - currentBw / avgBw) * 100) : 0;
+  return {
+    squeeze,
+    intensity,
+    currentBandwidth: Number(currentBw.toFixed(4)),
+    avgBandwidth:     Number(avgBw.toFixed(4)),
+    minBandwidth:     Number(minBw.toFixed(4)),
   };
 }
 
@@ -227,6 +257,7 @@ export async function POST(req) {
     const macdResult = macd(closes);
     const atrVal = atr(closes);
     const bb = bollingerBands(closes);
+    const bbSqueeze = bollingerSqueeze(closes);
     const m1 = mom(closes, 21), m3 = mom(closes, 63), m6 = mom(closes, 126);
     const stoch = stochastic(closes);
     const volTrend = volumeTrend(volumes);
@@ -251,6 +282,7 @@ export async function POST(req) {
     if (posInRange <= 25) strengths.push("Trading near the low of its 52-week range — potential value zone.");
     if (macdResult?.bullish) strengths.push("MACD above signal line — short-term momentum turning bullish.");
     if (bb && price < bb.lower) strengths.push("Price below lower Bollinger Band — mean reversion candidate.");
+    if (bbSqueeze?.squeeze) strengths.push(`Bollinger Band Squeeze detected (bandwidth ${bbSqueeze.intensity}% below average) — low-volatility coiling often precedes a significant breakout.`);
 
     if (s200 && price < s200) concerns.push("Below the 200-day average — long-term trend weak.");
     if (s50 && price < s50) concerns.push("Below the 50-day average — near-term momentum negative.");
@@ -315,6 +347,7 @@ export async function POST(req) {
       bollingerUpper: bb ? fmt(bb.upper) : null,
       bollingerMiddle: bb ? fmt(bb.middle) : null,
       bollingerLower: bb ? fmt(bb.lower) : null,
+      bbSqueeze,
       posInRange, mom1m: m1, mom3m: m3, mom6m: m6,
       signal: trend, signalColor: trendColor, strength, rationale,
       bull: strengths, bear: concerns, technical, fundamental,
