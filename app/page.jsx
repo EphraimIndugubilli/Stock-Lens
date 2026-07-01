@@ -59,6 +59,32 @@ function PriceChart({ series, ma50, ma200 }) {
   );
 }
 
+function MacdHistogramChart({ histSeries }) {
+  const W = 700, H = 52, pad = 10, n = histSeries.length;
+  if (n < 2) return null;
+  const valid = histSeries.filter(v => v != null);
+  if (!valid.length) return null;
+  const maxAbs = Math.max(...valid.map(Math.abs));
+  if (maxAbs === 0) return null;
+  const barW = (W - 2 * pad) / n;
+  const midY = H / 2;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }} preserveAspectRatio="none">
+      <line x1={pad} y1={midY} x2={W - pad} y2={midY} stroke={T.line} strokeWidth="0.8" />
+      {histSeries.map((v, i) => {
+        if (v == null) return null;
+        const bH = Math.max(1, (Math.abs(v) / maxAbs) * (midY - pad));
+        const bX = pad + i * barW;
+        const bY = v >= 0 ? midY - bH : midY;
+        return (
+          <rect key={i} x={bX} y={bY} width={Math.max(1, barW - 0.5)} height={bH}
+            fill={v >= 0 ? T.pos : T.neg} opacity="0.75" />
+        );
+      })}
+    </svg>
+  );
+}
+
 function VolumeChart({ volumes, series }) {
   const W = 700, H = 52, pad = 10, n = volumes.length;
   if (n < 2) return null;
@@ -317,6 +343,19 @@ export default function StockAdvisor() {
                       {result.macd.histogram >= 0 ? "+" : ""}{result.macd.histogram}
                     </div>
                   </div>
+                </div>
+              )}
+              {/* MACD histogram chart */}
+              {result.macdHistSeries && result.macdHistSeries.some(v => v != null) && (
+                <div style={{ marginTop: 10, border: `1px solid ${T.line}`, borderRadius: 10, padding: "10px 8px 4px", background: "#FCFDFC" }}>
+                  <div style={{ fontSize: 10.5, color: T.muted, padding: "0 6px 4px", display: "flex", justifyContent: "space-between" }}>
+                    <span>MACD Histogram — 1 year</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 8, background: T.pos, display: "inline-block", borderRadius: 2, opacity: 0.75 }} /> bullish</span>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 8, background: T.neg, display: "inline-block", borderRadius: 2, opacity: 0.75 }} /> bearish</span>
+                    </span>
+                  </div>
+                  <MacdHistogramChart histSeries={result.macdHistSeries} />
                 </div>
               )}
               {/* Stochastic + volume row */}

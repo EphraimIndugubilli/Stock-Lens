@@ -181,6 +181,36 @@ function rollingVwap(closes, volumes, period = 20) {
   return Number((sumCV / sumVol).toFixed(2));
 }
 
+// MACD histogram time series for charting — computed in O(n) via incremental EMAs.
+// Returns an array parallel to `closes` where each value is the MACD histogram
+// at that point in time (null before enough history exists).
+function macdHistogramSeries(closes) {
+  const n = closes.length;
+  if (n < 35) return new Array(n).fill(null);
+  const k12 = 2 / 13, k26 = 2 / 27, k9 = 2 / 10;
+
+  let e12 = closes.slice(0, 12).reduce((a, b) => a + b, 0) / 12;
+  for (let i = 12; i < 26; i++) e12 = closes[i] * k12 + e12 * (1 - k12);
+  let e26 = closes.slice(0, 26).reduce((a, b) => a + b, 0) / 26;
+
+  const macdArr = [];
+  for (let i = 26; i < n; i++) {
+    e12 = closes[i] * k12 + e12 * (1 - k12);
+    e26 = closes[i] * k26 + e26 * (1 - k26);
+    macdArr.push(e12 - e26);
+  }
+
+  if (macdArr.length < 9) return new Array(n).fill(null);
+
+  let signal = macdArr.slice(0, 9).reduce((a, b) => a + b, 0) / 9;
+  const hist = new Array(n).fill(null);
+  for (let i = 9; i < macdArr.length; i++) {
+    signal = macdArr[i] * k9 + signal * (1 - k9);
+    hist[26 + i] = Number((macdArr[i] - signal).toFixed(4));
+  }
+  return hist;
+}
+
 // 2026 quant best practice: don't trust any single oscillator — only flag a
 // strong signal when a majority of independent indicators agree on direction.
 // Checks RSI, MACD, Stochastic, OBV and VWAP and counts how many vote bullish
@@ -329,9 +359,11 @@ export async function POST(req) {
     const idx = downIdx(closes.length);
     const ma50full = smaSeries(closes, 50);
     const ma200full = smaSeries(closes, 200);
+    const macdHistFull = macdHistogramSeries(closes);
     const series = idx.map((i) => closes[i]);
     const ma50 = idx.map((i) => ma50full[i]);
     const ma200 = idx.map((i) => ma200full[i]);
+    const macdHistSeries = idx.map((i) => macdHistFull[i] ?? null);
 
     return Response.json({
       name: meta.longName || meta.shortName || sym,
@@ -364,6 +396,7 @@ export async function POST(req) {
       vwap: vwapRaw != null ? fmt(vwapRaw) : null,
       vwapAbove: vwapRaw != null ? price > vwapRaw : null,
       volumes: idx.map((i) => volumes[i] ?? null),
+      macdHistSeries,
     });
   } catch (e) {
     return Response.json({ error: "Something went wrong fetching the data.", detail: String(e) }, { status: 500 });
