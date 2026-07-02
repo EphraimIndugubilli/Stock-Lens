@@ -259,7 +259,8 @@ export default function StockAdvisor() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 16 }}>
                 {[["52-week range", result.week52], ["50-day avg", result.sma50], ["RSI (14)", result.rsi ?? "N/A"],
                   ["200-day avg", result.sma200 ?? "N/A"], ["EMA 21", result.ema21 ?? "N/A"],
-                  ["BB upper/lower", result.bollingerUpper && result.bollingerLower ? `${result.bollingerUpper} / ${result.bollingerLower}` : "N/A"]
+                  ["BB upper/lower", result.bollingerUpper && result.bollingerLower ? `${result.bollingerUpper} / ${result.bollingerLower}` : "N/A"],
+                  ["RSI (9) fast", result.rsiFast ?? "N/A"]
                 ].map(([k, v]) => (
                   <div key={k} style={{ background: T.bg, borderRadius: 9, padding: "10px 12px" }}>
                     <div style={{ fontSize: 11, color: T.muted }}>{k}</div>

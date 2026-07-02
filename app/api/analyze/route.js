@@ -283,6 +283,9 @@ export async function POST(req) {
     const s50 = sma(closes, 50);
     const s200 = sma(closes, 200);
     const r14 = rsi(closes);
+    // RSI(9) — 2026 quant trend: shorter period reacts faster to volatility,
+    // used as a momentum confirmation alongside the classic RSI(14).
+    const r9 = rsi(closes, 9);
     const e21 = ema(closes, 21);
     const macdResult = macd(closes);
     const atrVal = atr(closes);
@@ -313,6 +316,11 @@ export async function POST(req) {
     if (macdResult?.bullish) strengths.push("MACD above signal line — short-term momentum turning bullish.");
     if (bb && price < bb.lower) strengths.push("Price below lower Bollinger Band — mean reversion candidate.");
     if (bbSqueeze?.squeeze) strengths.push(`Bollinger Band Squeeze detected (bandwidth ${bbSqueeze.intensity}% below average) — low-volatility coiling often precedes a significant breakout.`);
+    // RSI(9) fast confirmation signals
+    if (r9 != null && r14 != null) {
+      if (r14 < 35 && r9 < 35) strengths.push(`RSI(9) at ${r9} confirms RSI(14) at ${r14} — both oversold, stronger rebound signal.`);
+      if (r14 > 65 && r9 > 65) concerns.push(`RSI(9) at ${r9} confirms RSI(14) at ${r14} — both overbought, higher reversal risk.`);
+    }
 
     if (s200 && price < s200) concerns.push("Below the 200-day average — long-term trend weak.");
     if (s50 && price < s50) concerns.push("Below the 50-day average — near-term momentum negative.");
@@ -373,7 +381,7 @@ export async function POST(req) {
       price: fmt(price),
       dayChangePct,
       week52: `${fmt(low52)} – ${fmt(high52)}`,
-      sma50: fmt(s50), sma200: fmt(s200), ema21: fmt(e21), rsi: r14,
+      sma50: fmt(s50), sma200: fmt(s200), ema21: fmt(e21), rsi: r14, rsiFast: r9,
       macd: macdResult,
       atr: atrVal,
       bollingerUpper: bb ? fmt(bb.upper) : null,
