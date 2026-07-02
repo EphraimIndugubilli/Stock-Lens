@@ -85,6 +85,33 @@ function MacdHistogramChart({ histSeries }) {
   );
 }
 
+function RsiChart({ rsiSeries }) {
+  const W = 700, H = 60, pad = 10, n = rsiSeries.length;
+  if (n < 2) return null;
+  const valid = rsiSeries.filter(v => v != null);
+  if (valid.length < 2) return null;
+  const x = (i) => pad + (i / (n - 1)) * (W - 2 * pad);
+  const y = (v) => pad + (1 - v / 100) * (H - 2 * pad);
+  const y30 = y(30), y70 = y(70), y50 = y(50);
+  let d = "", pen = false;
+  rsiSeries.forEach((v, i) => {
+    if (v == null) { pen = false; return; }
+    d += `${pen ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)} `;
+    pen = true;
+  });
+  const last = valid[valid.length - 1];
+  const lineColor = last >= 70 ? T.neg : last <= 30 ? T.pos : T.accent;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }} preserveAspectRatio="none">
+      <rect x={pad} y={y70} width={W - 2 * pad} height={y30 - y70} fill={T.warn} opacity="0.06" />
+      <line x1={pad} y1={y70} x2={W - pad} y2={y70} stroke={T.neg} strokeWidth="0.7" strokeDasharray="3 3" opacity="0.5" />
+      <line x1={pad} y1={y50} x2={W - pad} y2={y50} stroke={T.line} strokeWidth="0.6" opacity="0.6" />
+      <line x1={pad} y1={y30} x2={W - pad} y2={y30} stroke={T.pos} strokeWidth="0.7" strokeDasharray="3 3" opacity="0.5" />
+      <path d={d} fill="none" stroke={lineColor} strokeWidth="1.6" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function VolumeChart({ volumes, series }) {
   const W = 700, H = 52, pad = 10, n = volumes.length;
   if (n < 2) return null;
@@ -357,6 +384,19 @@ export default function StockAdvisor() {
                     </span>
                   </div>
                   <MacdHistogramChart histSeries={result.macdHistSeries} />
+                </div>
+              )}
+              {/* RSI chart */}
+              {result.rsiSeries && result.rsiSeries.some(v => v != null) && (
+                <div style={{ marginTop: 10, border: `1px solid ${T.line}`, borderRadius: 10, padding: "10px 8px 4px", background: "#FCFDFC" }}>
+                  <div style={{ fontSize: 10.5, color: T.muted, padding: "0 6px 4px", display: "flex", justifyContent: "space-between" }}>
+                    <span>RSI (14) — 1 year</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 18, borderTop: `1.5px dashed ${T.pos}`, display: "inline-block" }} /> 30 oversold</span>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 18, borderTop: `1.5px dashed ${T.neg}`, display: "inline-block" }} /> 70 overbought</span>
+                    </span>
+                  </div>
+                  <RsiChart rsiSeries={result.rsiSeries} />
                 </div>
               )}
               {/* Stochastic + volume row */}

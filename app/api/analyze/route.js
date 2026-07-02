@@ -233,6 +233,15 @@ function confluenceScore({ rsi, macd, stoch, obv, price, vwap }) {
   return { score, total, direction, bullCount, bearCount, aligned: total > 0 && score / total >= 0.6 };
 }
 
+// Full RSI time-series for charting — O(n²) over a 252-bar daily series is fast enough.
+function rsiSeriesFull(closes, period = 14) {
+  const arr = new Array(closes.length).fill(null);
+  for (let i = period; i < closes.length; i++) {
+    arr[i] = rsi(closes.slice(0, i + 1), period);
+  }
+  return arr;
+}
+
 function downIdx(len, target = 150) {
   if (len <= target) return [...Array(len).keys()];
   const stride = len / target, out = [];
@@ -368,10 +377,12 @@ export async function POST(req) {
     const ma50full = smaSeries(closes, 50);
     const ma200full = smaSeries(closes, 200);
     const macdHistFull = macdHistogramSeries(closes);
+    const rsiFullSeries = rsiSeriesFull(closes);
     const series = idx.map((i) => closes[i]);
     const ma50 = idx.map((i) => ma50full[i]);
     const ma200 = idx.map((i) => ma200full[i]);
     const macdHistSeries = idx.map((i) => macdHistFull[i] ?? null);
+    const rsiSeriesData = idx.map((i) => rsiFullSeries[i] ?? null);
 
     return Response.json({
       name: meta.longName || meta.shortName || sym,
@@ -405,6 +416,7 @@ export async function POST(req) {
       vwapAbove: vwapRaw != null ? price > vwapRaw : null,
       volumes: idx.map((i) => volumes[i] ?? null),
       macdHistSeries,
+      rsiSeries: rsiSeriesData,
     });
   } catch (e) {
     return Response.json({ error: "Something went wrong fetching the data.", detail: String(e) }, { status: 500 });
