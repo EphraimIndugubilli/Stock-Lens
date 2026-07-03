@@ -244,6 +244,44 @@ function rsiSeriesFull(closes, period = 14) {
   return arr;
 }
 
+
+// Fibonacci retracement levels from the 52-week range.
+// The golden ratio (61.8%) and key levels (38.2%, 50%) are widely watched
+// by Indian retail traders on Zerodha, Groww, and TradingView as
+// support/resistance zones for swing trades.
+function fibRetracement(low, high, price) {
+  if (high <= low) return null;
+  const range = high - low;
+  const ratios = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+  const levels = ratios.map((r) => ({
+    ratio: r,
+    label: `${(r * 100).toFixed(1)}%`,
+    value: Number((low + r * range).toFixed(2)),
+  }));
+
+  // Nearest support (below price) and resistance (above price)
+  let support = null, resistance = null;
+  for (const lvl of levels) {
+    if (lvl.value <= price) support = lvl;
+    else if (resistance == null) resistance = lvl;
+  }
+
+  // Zone the price is currently in
+  const below = levels.filter((l) => l.value <= price);
+  const above = levels.filter((l) => l.value > price);
+  const zone =
+    below.length && above.length
+      ? `${below[below.length - 1].label}–${above[0].label}`
+      : below.length ? 'above all levels' : 'below all levels';
+
+  // Whether price is within 1.5% of a key Fibonacci level
+  const nearKey = levels
+    .filter((l) => [0.382, 0.5, 0.618, 0.786].includes(l.ratio))
+    .find((l) => Math.abs((price - l.value) / l.value) <= 0.015) ?? null;
+
+  return { levels, zone, support, resistance, nearKey };
+}
+
 function downIdx(len, target = 150) {
   if (len <= target) return [...Array(len).keys()];
   const stride = len / target, out = [];
@@ -307,6 +345,7 @@ export async function POST(req) {
     const volTrend = volumeTrend(volumes);
     const obvResult = onBalanceVolume(closes, volumes);
     const vwapRaw = rollingVwap(closes, volumes);
+    const fib = fibRetracement(low52, high52, price);
 
     // Trend determination
     let trend = "Range-bound", trendColor = "warn";
@@ -349,6 +388,28 @@ export async function POST(req) {
     if (vwapRaw !== null && price > vwapRaw) strengths.push(`Price above 20-day VWAP (${fmt(vwapRaw)}) — volume-weighted consensus favours buyers.`);
     if (vwapRaw !== null && price <= vwapRaw) concerns.push(`Price below 20-day VWAP (${fmt(vwapRaw)}) — sellers dominate the volume-weighted average.`);
 
+
+    // Fibonacci retracement signals
+    if (fib) {
+      if (fib.nearKey) {
+        const pct = (((price - fib.nearKey.value) / fib.nearKey.value) * 100).toFixed(1);
+        const direction = price >= fib.nearKey.value ? 'at/above' : 'approaching';
+        if ([0.382, 0.618].includes(fib.nearKey.ratio)) {
+          if (posInRange < 50)
+            strengths.push(`Price ${direction} key Fibonacci ${fib.nearKey.label} support (${fmt(fib.nearKey.value)}) — golden ratio zone, historically strong rebound area.`);
+          else
+            concerns.push(`Price ${direction} Fibonacci ${fib.nearKey.label} resistance (${fmt(fib.nearKey.value)}) — golden ratio zone, historically a reversal point.`);
+        } else {
+          strengths.push(`Price near Fibonacci ${fib.nearKey.label} level (${fmt(fib.nearKey.value)}) — technically significant zone.`);
+        }
+      }
+      if (fib.support && fib.resistance) {
+        const distToResistancePct = ((fib.resistance.value - price) / price * 100).toFixed(1);
+        const distToSupportPct = ((price - fib.support.value) / price * 100).toFixed(1);
+        if (parseFloat(distToResistancePct) <= 2.0 && fib.resistance.ratio <= 0.618)
+          concerns.push(`Only ${distToResistancePct}% from Fibonacci ${fib.resistance.label} resistance (${fmt(fib.resistance.value)}) — limited upside before key level.`);
+      }
+    }
     if (!strengths.length) strengths.push("No standout positive signals right now.");
     if (!concerns.length) concerns.push("No major technical red flags right now.");
 
@@ -419,6 +480,7 @@ export async function POST(req) {
       volumes: idx.map((i) => volumes[i] ?? null),
       macdHistSeries,
       rsiSeries: rsiSeriesData,
+      fibRetracement: fib,
     });
   } catch (e) {
     return Response.json({ error: "Something went wrong fetching the data.", detail: String(e) }, { status: 500 });
