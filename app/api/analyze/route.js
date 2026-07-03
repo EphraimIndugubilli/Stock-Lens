@@ -217,9 +217,11 @@ function macdHistogramSeries(closes) {
 // vs bearish.
 function confluenceScore({ rsi, macd, stoch, obv, price, vwap }) {
   const votes = [];
-  if (rsi != null) votes.push(rsi < 50 ? "bull" : rsi > 50 ? "bear" : null);
+  // RSI > 50: recent gains > losses = bullish momentum; < 50 = bearish momentum.
+  if (rsi != null) votes.push(rsi > 50 ? "bull" : rsi < 50 ? "bear" : null);
   if (macd) votes.push(macd.bullish ? "bull" : "bear");
-  if (stoch) votes.push(stoch.k < 50 ? "bull" : stoch.k > 50 ? "bear" : null);
+  // Stochastic K > 50: price in upper half of recent range = bullish; < 50 = bearish.
+  if (stoch) votes.push(stoch.k > 50 ? "bull" : stoch.k < 50 ? "bear" : null);
   if (obv) votes.push(obv.trend === "rising" ? "bull" : obv.trend === "falling" ? "bear" : null);
   if (vwap != null) votes.push(price > vwap ? "bull" : "bear");
 
