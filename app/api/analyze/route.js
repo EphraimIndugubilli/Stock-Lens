@@ -181,12 +181,14 @@ function rollingVwap(closes, volumes, period = 20) {
   return Number((sumCV / sumVol).toFixed(2));
 }
 
-// MACD histogram time series for charting — computed in O(n) via incremental EMAs.
-// Returns an array parallel to `closes` where each value is the MACD histogram
-// at that point in time (null before enough history exists).
-function macdHistogramSeries(closes) {
+// MACD full time series — returns hist, macdLine, and signalLine arrays, all
+// parallel to `closes` with null before enough history exists. Splitting into
+// three separate series lets the chart overlay MACD and signal lines on top of
+// the histogram bars without a second data-fetch round-trip.
+function macdFullSeries(closes) {
   const n = closes.length;
-  if (n < 35) return new Array(n).fill(null);
+  const empty = () => new Array(n).fill(null);
+  if (n < 35) return { hist: empty(), macdLine: empty(), signalLine: empty() };
   const k12 = 2 / 13, k26 = 2 / 27, k9 = 2 / 10;
 
   let e12 = closes.slice(0, 12).reduce((a, b) => a + b, 0) / 12;
@@ -200,15 +202,22 @@ function macdHistogramSeries(closes) {
     macdArr.push(e12 - e26);
   }
 
-  if (macdArr.length < 9) return new Array(n).fill(null);
+  if (macdArr.length < 9) return { hist: empty(), macdLine: empty(), signalLine: empty() };
 
-  let signal = macdArr.slice(0, 9).reduce((a, b) => a + b, 0) / 9;
-  const hist = new Array(n).fill(null);
+  let sig = macdArr.slice(0, 9).reduce((a, b) => a + b, 0) / 9;
+  const hist = empty(), macdLine = empty(), signalLine = empty();
   for (let i = 9; i < macdArr.length; i++) {
-    signal = macdArr[i] * k9 + signal * (1 - k9);
-    hist[26 + i] = Number((macdArr[i] - signal).toFixed(4));
+    sig = macdArr[i] * k9 + sig * (1 - k9);
+    const idx = 26 + i;
+    hist[idx]       = Number((macdArr[i] - sig).toFixed(4));
+    macdLine[idx]   = Number(macdArr[i].toFixed(4));
+    signalLine[idx] = Number(sig.toFixed(4));
   }
-  return hist;
+  return { hist, macdLine, signalLine };
+}
+
+function macdHistogramSeries(closes) {
+  return macdFullSeries(closes).hist;
 }
 
 // 2026 quant best practice: don't trust any single oscillator — only flag a
@@ -439,12 +448,14 @@ export async function POST(req) {
     const idx = downIdx(closes.length);
     const ma50full = smaSeries(closes, 50);
     const ma200full = smaSeries(closes, 200);
-    const macdHistFull = macdHistogramSeries(closes);
+    const macdFull = macdFullSeries(closes);
     const rsiFullSeries = rsiSeriesFull(closes);
     const series = idx.map((i) => closes[i]);
     const ma50 = idx.map((i) => ma50full[i]);
     const ma200 = idx.map((i) => ma200full[i]);
-    const macdHistSeries = idx.map((i) => macdHistFull[i] ?? null);
+    const macdHistSeries = idx.map((i) => macdFull.hist[i] ?? null);
+    const macdLineSeries = idx.map((i) => macdFull.macdLine[i] ?? null);
+    const macdSignalSeries = idx.map((i) => macdFull.signalLine[i] ?? null);
     const rsiSeriesData = idx.map((i) => rsiFullSeries[i] ?? null);
 
     return Response.json({
@@ -479,6 +490,8 @@ export async function POST(req) {
       vwapAbove: vwapRaw != null ? price > vwapRaw : null,
       volumes: idx.map((i) => volumes[i] ?? null),
       macdHistSeries,
+      macdLineSeries,
+      macdSignalSeries,
       rsiSeries: rsiSeriesData,
       fibRetracement: fib,
     });
