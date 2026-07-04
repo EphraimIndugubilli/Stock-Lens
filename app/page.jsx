@@ -343,6 +343,38 @@ export default function StockAdvisor() {
                     </div>
                   </div>
                 )}
+                {result.superTrend && (
+                  <div style={{ background: result.superTrend.direction === "bullish" ? T.pos + "12" : T.neg + "12", border: `1px solid ${result.superTrend.direction === "bullish" ? T.pos : T.neg}40`, borderRadius: 9, padding: "10px 12px", gridColumn: "1 / -1" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: T.muted }}>SuperTrend (10, 3) — ATR Trend Filter</div>
+                        <div style={{ fontFamily: T.mono, fontSize: 15, marginTop: 3, color: result.superTrend.direction === "bullish" ? T.pos : T.neg }}>
+                          {result.superTrend.value != null ? result.superTrend.value.toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "—"}
+                          {result.superTrend.distPct != null && (
+                            <span style={{ fontSize: 12, marginLeft: 6, opacity: 0.75 }}>
+                              ({result.superTrend.distPct > 0 ? "+" : ""}{result.superTrend.distPct}% from line)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, background: (result.superTrend.direction === "bullish" ? T.pos : T.neg) + "22", borderRadius: 7, padding: "5px 10px" }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: result.superTrend.direction === "bullish" ? T.pos : T.neg }}>
+                            {result.superTrend.direction === "bullish" ? "▲ BULLISH" : "▼ BEARISH"}
+                          </span>
+                        </div>
+                        {result.superTrend.justFlipped && (
+                          <span style={{ fontSize: 10, fontWeight: 600, color: result.superTrend.direction === "bullish" ? T.pos : T.neg, background: (result.superTrend.direction === "bullish" ? T.pos : T.neg) + "18", borderRadius: 4, padding: "2px 7px" }}>
+                            ⚡ Just Flipped
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>
+                      SuperTrend sets ATR-based bands that flip side on crossover — the primary adaptive trend filter used by Indian swing traders in 2026. Bullish = price above support line; Bearish = price below resistance line.
+                    </div>
+                  </div>
+                )}
               </div>
               {/* BB Squeeze — 2026 breakout-coiling detector */}
               {result.bbSqueeze && (

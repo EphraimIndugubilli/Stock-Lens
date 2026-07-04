@@ -291,6 +291,80 @@ function fibRetracement(low, high, price) {
   return { levels, zone, support, resistance, nearKey };
 }
 
+// SuperTrend — 2026 quant research highlights "SuperTrend or EMA" as the
+// primary trend-direction filter in the winning Triple Threat setup. It uses
+// ATR to compute a dynamic support/resistance band that flips side when price
+// crosses it, giving a single clean BUY/SELL signal that adapts to volatility.
+// multiplier=3, period=10 are the widely-used defaults for daily data.
+function superTrend(closes, period = 10, multiplier = 3) {
+  if (closes.length < period + 1) return null;
+
+  // Rolling ATR (average of |close[i] - close[i-1]| over `period` bars)
+  const trArr = closes.slice(1).map((c, i) => Math.abs(c - closes[i]));
+  const atrSeries = [];
+  for (let i = 0; i < trArr.length; i++) {
+    if (i < period - 1) { atrSeries.push(null); continue; }
+    const slice = trArr.slice(i - period + 1, i + 1);
+    atrSeries.push(slice.reduce((a, b) => a + b, 0) / period);
+  }
+
+  // Compute final upper/lower bands with the "lock-in" rule.
+  // Using close as the midpoint (HL/2 proxy — standard for daily close-only data).
+  const upperBands = new Array(closes.length).fill(null);
+  const lowerBands = new Array(closes.length).fill(null);
+  const superTrendLine = new Array(closes.length).fill(null);
+  const direction = new Array(closes.length).fill(null); // 1=bullish, -1=bearish
+
+  for (let i = period; i < closes.length; i++) {
+    const atrVal = atrSeries[i - 1];
+    if (atrVal == null) continue;
+
+    const basicUpper = closes[i] + multiplier * atrVal;
+    const basicLower = closes[i] - multiplier * atrVal;
+
+    const prevUpper = upperBands[i - 1];
+    const prevLower = lowerBands[i - 1];
+
+    upperBands[i] = (prevUpper == null || basicUpper < prevUpper || closes[i - 1] > prevUpper)
+      ? basicUpper : prevUpper;
+    lowerBands[i] = (prevLower == null || basicLower > prevLower || closes[i - 1] < prevLower)
+      ? basicLower : prevLower;
+
+    const prevDir = direction[i - 1] ?? 1;
+    if (prevDir === -1 && closes[i] > upperBands[i]) {
+      direction[i] = 1;
+    } else if (prevDir === 1 && closes[i] < lowerBands[i]) {
+      direction[i] = -1;
+    } else {
+      direction[i] = prevDir;
+    }
+    superTrendLine[i] = direction[i] === 1 ? lowerBands[i] : upperBands[i];
+  }
+
+  const last = closes.length - 1;
+  if (direction[last] == null) return null;
+
+  const currentLine = superTrendLine[last];
+  const currentPrice = closes[last];
+  const isBullish = direction[last] === 1;
+  const distPct = currentLine != null
+    ? Number((((currentPrice - currentLine) / currentLine) * 100).toFixed(2))
+    : null;
+
+  // Detect a flip in the last bar (trend changed this period)
+  const justFlipped = last > 0 && direction[last] !== direction[last - 1];
+
+  return {
+    value:      currentLine != null ? Number(currentLine.toFixed(2)) : null,
+    direction:  isBullish ? 'bullish' : 'bearish',
+    distPct,
+    justFlipped,
+    period,
+    multiplier,
+    series:     superTrendLine, // full series for charting
+  };
+}
+
 function downIdx(len, target = 150) {
   if (len <= target) return [...Array(len).keys()];
   const stride = len / target, out = [];
@@ -355,6 +429,7 @@ export async function POST(req) {
     const obvResult = onBalanceVolume(closes, volumes);
     const vwapRaw = rollingVwap(closes, volumes);
     const fib = fibRetracement(low52, high52, price);
+    const stResult = superTrend(closes);
 
     // Trend determination
     let trend = "Range-bound", trendColor = "warn";
@@ -397,6 +472,25 @@ export async function POST(req) {
     if (vwapRaw !== null && price > vwapRaw) strengths.push(`Price above 20-day VWAP (${fmt(vwapRaw)}) — volume-weighted consensus favours buyers.`);
     if (vwapRaw !== null && price <= vwapRaw) concerns.push(`Price below 20-day VWAP (${fmt(vwapRaw)}) — sellers dominate the volume-weighted average.`);
 
+    // SuperTrend signals — 2026 research identifies SuperTrend as the top
+    // adaptive trend filter: ATR-based bands that flip on crossover give a
+    // single actionable read without the noise of raw price vs. moving average.
+    if (stResult) {
+      const stLine = stResult.value != null ? fmt(stResult.value) : null;
+      if (stResult.direction === 'bullish') {
+        const msg = stLine
+          ? `SuperTrend bullish (support at ${stLine}${stResult.distPct != null ? `, price ${stResult.distPct > 0 ? '+' : ''}${stResult.distPct}% above line` : ''}) — trend-following signal is buy.`
+          : 'SuperTrend is in bullish mode — trend-following signal is buy.';
+        if (stResult.justFlipped) strengths.push('SuperTrend just flipped bullish — a fresh trend-reversal buy signal.');
+        else strengths.push(msg);
+      } else {
+        const msg = stLine
+          ? `SuperTrend bearish (resistance at ${stLine}${stResult.distPct != null ? `, price ${Math.abs(stResult.distPct)}% below line` : ''}) — trend-following signal is sell.`
+          : 'SuperTrend is in bearish mode — trend-following signal is sell.';
+        if (stResult.justFlipped) concerns.push('SuperTrend just flipped bearish — a fresh trend-reversal sell signal.');
+        else concerns.push(msg);
+      }
+    }
 
     // Fibonacci retracement signals
     if (fib) {
@@ -494,6 +588,13 @@ export async function POST(req) {
       macdSignalSeries,
       rsiSeries: rsiSeriesData,
       fibRetracement: fib,
+      superTrend: stResult ? {
+        value:      stResult.value,
+        direction:  stResult.direction,
+        distPct:    stResult.distPct,
+        justFlipped: stResult.justFlipped,
+        series:     stResult.series ? idx.map((i) => stResult.series[i] ?? null) : null,
+      } : null,
     });
   } catch (e) {
     return Response.json({ error: "Something went wrong fetching the data.", detail: String(e) }, { status: 500 });
