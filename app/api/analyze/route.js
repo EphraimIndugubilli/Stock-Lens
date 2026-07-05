@@ -74,6 +74,56 @@ function bollingerBands(closes, period = 20) {
   };
 }
 
+// ADX (Average Directional Index) — 2026 best practice: gate all oscillator signals
+// through ADX so they are only acted on when a real trend exists. ADX > 25 confirms
+// a directional trend; ADX < 15 means the market is ranging and RSI/MACD crossovers
+// are noise. Uses Wilder's smoothing (same as original Welles Wilder formulation).
+function adx(prices, period = 14) {
+  if (prices.length < period * 2 + 1) return null;
+  const trArr = [], plusDmArr = [], minusDmArr = [];
+  for (let i = 1; i < prices.length; i++) {
+    trArr.push(Math.abs(prices[i] - prices[i - 1]));
+    const upMove   = prices[i] - prices[i - 1];
+    const downMove = prices[i - 1] - prices[i];
+    plusDmArr.push(upMove > downMove && upMove > 0 ? upMove : 0);
+    minusDmArr.push(downMove > upMove && downMove > 0 ? downMove : 0);
+  }
+  // Wilder's smoothing: first value = sum over period; then ATR-style rolling
+  const wilderSmooth = (arr, p) => {
+    let s = arr.slice(0, p).reduce((a, b) => a + b, 0);
+    const result = [s];
+    for (let i = p; i < arr.length; i++) {
+      s = s - s / p + arr[i];
+      result.push(s);
+    }
+    return result;
+  };
+  const atrS     = wilderSmooth(trArr,    period);
+  const plusDmS  = wilderSmooth(plusDmArr, period);
+  const minusDmS = wilderSmooth(minusDmArr, period);
+  const dxArr = [];
+  for (let i = 0; i < atrS.length; i++) {
+    if (atrS[i] === 0) continue;
+    const pdi = plusDmS[i]  / atrS[i] * 100;
+    const mdi = minusDmS[i] / atrS[i] * 100;
+    if (pdi + mdi === 0) continue;
+    dxArr.push(Math.abs(pdi - mdi) / (pdi + mdi) * 100);
+  }
+  if (dxArr.length < period) return null;
+  const adxVal = dxArr.slice(-period).reduce((a, b) => a + b, 0) / period;
+  const lastAtr = atrS[atrS.length - 1];
+  if (lastAtr === 0) return null;
+  const plusDI  = Number((plusDmS[plusDmS.length   - 1] / lastAtr * 100).toFixed(1));
+  const minusDI = Number((minusDmS[minusDmS.length - 1] / lastAtr * 100).toFixed(1));
+  return {
+    adx:      Number(adxVal.toFixed(1)),
+    plusDI,
+    minusDI,
+    trend:    adxVal > 25 ? 'strong' : adxVal < 15 ? 'weak' : 'moderate',
+    bullish:  plusDI > minusDI,
+  };
+}
+
 // Bollinger Band Squeeze — the hottest breakout signal in 2026 quant circles.
 // Bands narrow (low bandwidth) before explosive moves, since volatility cycles
 // from contraction to expansion. Squeeze = current bandwidth below its own
@@ -430,6 +480,7 @@ export async function POST(req) {
     const vwapRaw = rollingVwap(closes, volumes);
     const fib = fibRetracement(low52, high52, price);
     const stResult = superTrend(closes);
+    const adxResult = adx(closes);
 
     // Trend determination
     let trend = "Range-bound", trendColor = "warn";
@@ -489,6 +540,19 @@ export async function POST(req) {
           : 'SuperTrend is in bearish mode — trend-following signal is sell.';
         if (stResult.justFlipped) concerns.push('SuperTrend just flipped bearish — a fresh trend-reversal sell signal.');
         else concerns.push(msg);
+      }
+    }
+
+    // ADX trend-strength gate — 2026 best practice: oscillator signals (RSI, MACD)
+    // are unreliable in ranging markets. ADX < 15 = ranging noise; ADX > 25 =
+    // directional trend confirmed. Surface this context so the user knows whether
+    // to trust the momentum signals above.
+    if (adxResult) {
+      if (adxResult.trend === 'strong') {
+        const dir = adxResult.bullish ? 'bullish (+DI > −DI)' : 'bearish (−DI > +DI)';
+        strengths.push(`ADX ${adxResult.adx} — strong trend confirmed (${dir}); momentum indicators are more reliable.`);
+      } else if (adxResult.trend === 'weak') {
+        concerns.push(`ADX ${adxResult.adx} — weak/ranging market; RSI and MACD crossovers carry less weight until a trend re-establishes.`);
       }
     }
 
@@ -587,6 +651,7 @@ export async function POST(req) {
       macdLineSeries,
       macdSignalSeries,
       rsiSeries: rsiSeriesData,
+      adx: adxResult ?? null,
       fibRetracement: fib,
       superTrend: stResult ? {
         value:      stResult.value,
