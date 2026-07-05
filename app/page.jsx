@@ -34,10 +34,11 @@ function buildSvgPath(series, x, y) {
   return d;
 }
 
-function PriceChart({ series, ma50, ma200 }) {
+function PriceChart({ series, ma50, ma200, superTrendSeries, superTrendBullish }) {
   const W = 700, H = 230, pad = 10, n = series.length;
   if (n < 2) return null;
-  const allVals = [...series, ...ma50.filter(Boolean), ...(ma200 || []).filter(Boolean)];
+  const stValid = superTrendSeries ? superTrendSeries.filter(Boolean) : [];
+  const allVals = [...series, ...ma50.filter(Boolean), ...(ma200 || []).filter(Boolean), ...stValid];
   const min = Math.min(...allVals), max = Math.max(...allVals), span = max - min || 1;
   const x = (i) => pad + (i / (n - 1)) * (W - 2 * pad);
   const y = (v) => pad + (1 - (v - min) / span) * (H - 2 * pad);
@@ -45,6 +46,8 @@ function PriceChart({ series, ma50, ma200 }) {
   const areaPath = `${linePath} L${x(n - 1).toFixed(1)} ${H - pad} L${x(0).toFixed(1)} ${H - pad} Z`;
   const ma50Path = buildSvgPath(ma50, x, y);
   const ma200Path = ma200 ? buildSvgPath(ma200, x, y) : "";
+  const stPath = stValid.length ? buildSvgPath(superTrendSeries, x, y) : "";
+  const stColor = superTrendBullish ? T.pos : T.neg;
   const up = series[n - 1] >= series[0], stroke = up ? T.pos : T.neg;
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }} preserveAspectRatio="none">
@@ -55,6 +58,7 @@ function PriceChart({ series, ma50, ma200 }) {
       <path d={linePath} fill="none" stroke={stroke} strokeWidth="2" strokeLinejoin="round" />
       {ma50Path && <path d={ma50Path} fill="none" stroke={T.warn} strokeWidth="1.4" strokeDasharray="4 3" opacity="0.85" />}
       {ma200Path && <path d={ma200Path} fill="none" stroke="#9B59B6" strokeWidth="1.4" strokeDasharray="6 3" opacity="0.75" />}
+      {stPath && <path d={stPath} fill="none" stroke={stColor} strokeWidth="1.6" strokeDasharray="3 3" opacity="0.7" />}
     </svg>
   );
 }
@@ -296,7 +300,7 @@ export default function StockAdvisor() {
                 </div>
               </div>
               <div style={{ marginTop: 16, border: `1px solid ${T.line}`, borderRadius: 10, padding: "10px 8px 4px", background: "#FCFDFC" }}>
-                <PriceChart series={result.series} ma50={result.ma50} ma200={result.ma200} />
+                <PriceChart series={result.series} ma50={result.ma50} ma200={result.ma200} superTrendSeries={result.superTrend?.series} superTrendBullish={result.superTrend?.direction === "bullish"} />
                 {result.volumes && result.volumes.some(Boolean) && (
                   <>
                     <div style={{ borderTop: `1px solid ${T.line}`, margin: "4px 0 2px", opacity: 0.5 }} />
@@ -305,10 +309,16 @@ export default function StockAdvisor() {
                 )}
                 <div style={{ display: "flex", justifyContent: "space-between", padding: "2px 6px 2px", fontSize: 10.5, color: T.muted }}>
                   <span>1 year{result.volumes && result.volumes.some(Boolean) ? " · incl. volume" : ""}</span>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 14, height: 2, background: T.accent, display: "inline-block" }} /> price</span>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 14, borderTop: `2px dashed ${T.warn}` }} /> 50d</span>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 14, borderTop: "2px dashed #9B59B6" }} /> 200d</span>
+                    {result.superTrend?.series?.some(Boolean) && (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ width: 14, borderTop: `2px dotted ${result.superTrend.direction === "bullish" ? T.pos : T.neg}` }} />
+                        {" ST"}
+                      </span>
+                    )}
                   </span>
                 </div>
               </div>
