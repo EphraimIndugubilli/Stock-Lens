@@ -518,6 +518,44 @@ export default function StockAdvisor() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
                 {momCell("1-month", result.mom1m)}{momCell("3-month", result.mom3m)}{momCell("6-month", result.mom6m)}
               </div>
+              {result.adx && (() => {
+                const adxVal = result.adx.adx;
+                const adxColor = result.adx.trend === 'strong' ? (result.adx.bullish ? T.pos : T.neg) : result.adx.trend === 'weak' ? T.muted : T.warn;
+                const adxLabel = result.adx.trend === 'strong'
+                  ? (result.adx.bullish ? 'Strong trend ↑' : 'Strong trend ↓')
+                  : result.adx.trend === 'weak' ? 'Ranging / weak' : 'Moderate trend';
+                const adxBarPct = Math.min(100, (adxVal / 60) * 100);
+                return (
+                  <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+                    <div style={{ background: T.bg, borderRadius: 9, padding: "10px 12px" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 11, color: T.muted }}>ADX (14) — Trend Strength</div>
+                          <div style={{ fontFamily: T.mono, fontSize: 15, marginTop: 3, color: adxColor }}>{adxVal}</div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, background: adxColor + "18", borderRadius: 7, padding: "5px 10px" }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: adxColor }}>{adxLabel}</span>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: 8 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: T.muted, marginBottom: 3 }}>
+                          <span>0 — flat</span><span>25 — trending</span><span>60 — strong</span>
+                        </div>
+                        <div style={{ height: 5, background: T.line, borderRadius: 4, overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${adxBarPct}%`, background: adxColor, borderRadius: 4, transition: "width 0.4s" }} />
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>
+                        {result.adx.trend === 'strong'
+                          ? "ADX above 25 confirms a directional trend — RSI and MACD signals are more reliable in trending markets."
+                          : result.adx.trend === 'weak'
+                          ? "ADX below 20 signals a ranging market — oscillator crossovers are noisier; wait for trend confirmation."
+                          : "ADX between 20-25 — trend developing; watch for breakout above 25 to confirm direction."}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
               {result.obv && (() => {
                 const obvColor = result.obv.trend === 'rising' ? T.pos : result.obv.trend === 'falling' ? T.neg : T.muted;
                 const trendLabel = result.obv.trend === 'rising' ? 'Accumulation ↑' : result.obv.trend === 'falling' ? 'Distribution ↓' : 'Neutral →';
