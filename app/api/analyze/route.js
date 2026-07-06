@@ -415,6 +415,62 @@ function superTrend(closes, period = 10, multiplier = 3) {
   };
 }
 
+// RSI divergence — 2026 quant research identifies this as the most powerful
+// signal: price makes a new swing high/low but RSI fails to confirm, warning
+// that momentum is fading before the price reversal is visible.
+// Uses a swing-point approach: finds the two most recent valleys (for bullish)
+// or peaks (for bearish) in the price series and checks if RSI contradicts them.
+function rsiDivergence(closes, period = 14, swingLookback = 5) {
+  if (closes.length < period * 3) return null;
+
+  // Find swing lows (price < both neighbours within ±swingLookback bars)
+  function findSwings(arr, type = 'low') {
+    const swings = [];
+    for (let i = swingLookback; i < arr.length - swingLookback; i++) {
+      const window = arr.slice(i - swingLookback, i + swingLookback + 1);
+      const val = arr[i];
+      if (type === 'low'  && val === Math.min(...window)) swings.push({ idx: i, price: val });
+      if (type === 'high' && val === Math.max(...window)) swings.push({ idx: i, price: val });
+    }
+    return swings;
+  }
+
+  // Build full RSI series
+  const rsiArr = [];
+  for (let i = period; i < closes.length; i++) {
+    rsiArr[i] = rsi(closes.slice(0, i + 1), period);
+  }
+
+  const lows  = findSwings(closes, 'low');
+  const highs = findSwings(closes, 'high');
+
+  // Bullish divergence: last two swing lows — price lower but RSI higher
+  if (lows.length >= 2) {
+    const prev = lows[lows.length - 2];
+    const last = lows[lows.length - 1];
+    const rsiPrev = rsiArr[prev.idx];
+    const rsiLast = rsiArr[last.idx];
+    if (rsiPrev != null && rsiLast != null && last.price < prev.price && rsiLast > rsiPrev) {
+      const strength = Math.round((rsiLast - rsiPrev) / rsiPrev * 100);
+      return { type: 'bullish', strength, priceLow1: prev.price, priceLow2: last.price, rsiLow1: rsiPrev, rsiLow2: rsiLast };
+    }
+  }
+
+  // Bearish divergence: last two swing highs — price higher but RSI lower
+  if (highs.length >= 2) {
+    const prev = highs[highs.length - 2];
+    const last = highs[highs.length - 1];
+    const rsiPrev = rsiArr[prev.idx];
+    const rsiLast = rsiArr[last.idx];
+    if (rsiPrev != null && rsiLast != null && last.price > prev.price && rsiLast < rsiPrev) {
+      const strength = Math.round((rsiPrev - rsiLast) / rsiPrev * 100);
+      return { type: 'bearish', strength, priceHigh1: prev.price, priceHigh2: last.price, rsiHigh1: rsiPrev, rsiHigh2: rsiLast };
+    }
+  }
+
+  return { type: 'none' };
+}
+
 function downIdx(len, target = 150) {
   if (len <= target) return [...Array(len).keys()];
   const stride = len / target, out = [];
@@ -481,6 +537,7 @@ export async function POST(req) {
     const fib = fibRetracement(low52, high52, price);
     const stResult = superTrend(closes);
     const adxResult = adx(closes);
+    const rsiDiv = rsiDivergence(closes);
 
     // Trend determination
     let trend = "Range-bound", trendColor = "warn";
@@ -577,6 +634,15 @@ export async function POST(req) {
           concerns.push(`Only ${distToResistancePct}% from Fibonacci ${fib.resistance.label} resistance (${fmt(fib.resistance.value)}) — limited upside before key level.`);
       }
     }
+    // RSI divergence signals — 2026 most-cited trading signal: momentum fades
+    // before price reverses, so RSI divergence fires earlier than most signals.
+    if (rsiDiv && rsiDiv.type === 'bullish') {
+      strengths.push(`Bullish RSI divergence: price made a lower low but RSI held higher (strength +${rsiDiv.strength}%) — momentum is improving even as price dipped, a leading reversal signal.`);
+    }
+    if (rsiDiv && rsiDiv.type === 'bearish') {
+      concerns.push(`Bearish RSI divergence: price made a higher high but RSI weakened (strength −${rsiDiv.strength}%) — momentum is fading despite the price advance, a leading reversal warning.`);
+    }
+
     if (!strengths.length) strengths.push("No standout positive signals right now.");
     if (!concerns.length) concerns.push("No major technical red flags right now.");
 
@@ -652,6 +718,7 @@ export async function POST(req) {
       macdSignalSeries,
       rsiSeries: rsiSeriesData,
       adx: adxResult ?? null,
+      rsiDivergence: rsiDiv ?? null,
       fibRetracement: fib,
       superTrend: stResult ? {
         value:      stResult.value,
