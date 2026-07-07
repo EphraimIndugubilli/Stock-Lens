@@ -181,6 +181,38 @@ function VolumeChart({ volumes, series }) {
   );
 }
 
+function StochChart({ kSeries, dSeries }) {
+  const W = 700, H = 70, pad = 10, n = kSeries.length;
+  if (n < 2) return null;
+  const validK = kSeries.filter(v => v != null);
+  if (validK.length < 2) return null;
+  const x = (i) => pad + (i / (n - 1)) * (W - 2 * pad);
+  const y = (v) => pad + (1 - v / 100) * (H - 2 * pad);
+  const y80 = y(80), y50 = y(50), y20 = y(20);
+  let kPath = "", dPath = "", kPen = false, dPen = false;
+  kSeries.forEach((v, i) => {
+    if (v == null) { kPen = false; return; }
+    kPath += `${kPen ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)} `;
+    kPen = true;
+  });
+  (dSeries || []).forEach((v, i) => {
+    if (v == null) { dPen = false; return; }
+    dPath += `${dPen ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)} `;
+    dPen = true;
+  });
+  const lastK = validK[validK.length - 1];
+  const lineColor = lastK > 80 ? T.neg : lastK < 20 ? T.pos : T.muted;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }} preserveAspectRatio="none">
+      <line x1={pad} y1={y80} x2={W - pad} y2={y80} stroke={T.neg} strokeWidth="0.7" strokeDasharray="3 3" opacity="0.5" />
+      <line x1={pad} y1={y50} x2={W - pad} y2={y50} stroke={T.line} strokeWidth="0.6" opacity="0.6" />
+      <line x1={pad} y1={y20} x2={W - pad} y2={y20} stroke={T.pos} strokeWidth="0.7" strokeDasharray="3 3" opacity="0.5" />
+      {kPath && <path d={kPath} fill="none" stroke={lineColor} strokeWidth="1.6" strokeLinejoin="round" />}
+      {dPath && <path d={dPath} fill="none" stroke={T.warn} strokeWidth="1.2" strokeDasharray="4 3" strokeLinejoin="round" opacity="0.85" />}
+    </svg>
+  );
+}
+
 export default function StockAdvisor() {
   const [symbol, setSymbol] = useState("");
   const [loading, setLoading] = useState(false);
@@ -485,6 +517,19 @@ export default function StockAdvisor() {
                     </span>
                   </div>
                   <RsiChart rsiSeries={result.rsiSeries} rsi9Series={result.rsi9Series} />
+                </div>
+              )}
+              {/* Stochastic oscillator chart */}
+              {result.stochKSeries && result.stochKSeries.some(v => v != null) && (
+                <div style={{ marginTop: 10, border: `1px solid ${T.line}`, borderRadius: 10, padding: "10px 8px 4px", background: "#FCFDFC" }}>
+                  <div style={{ fontSize: 10.5, color: T.muted, padding: "0 6px 4px", display: "flex", justifyContent: "space-between" }}>
+                    <span>Stochastic %K / %D — 1 year</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 18, height: 2, background: T.muted, display: "inline-block", borderRadius: 1 }} /> %K</span>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 18, borderTop: `1.5px dashed ${T.warn}`, display: "inline-block" }} /> %D signal</span>
+                    </span>
+                  </div>
+                  <StochChart kSeries={result.stochKSeries} dSeries={result.stochDSeries || []} />
                 </div>
               )}
               {/* Stochastic + volume row */}

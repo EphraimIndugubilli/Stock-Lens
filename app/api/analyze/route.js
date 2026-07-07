@@ -305,6 +305,29 @@ function rsiSeriesFull(closes, period = 14) {
   return arr;
 }
 
+// Full Stochastic %K and %D time-series for charting.
+// Returns two parallel arrays (kArr, dArr) aligned with the closes array.
+// %D is a 3-period SMA of %K — the signal line used to spot crossovers.
+function stochSeriesFull(closes, period = 14, dPeriod = 3) {
+  const n = closes.length;
+  const kArr = new Array(n).fill(null);
+  const dArr = new Array(n).fill(null);
+
+  for (let i = period - 1; i < n; i++) {
+    const sl = closes.slice(i - period + 1, i + 1);
+    const lo = Math.min(...sl), hi = Math.max(...sl);
+    kArr[i] = hi === lo ? 50 : Number((((closes[i] - lo) / (hi - lo)) * 100).toFixed(1));
+  }
+
+  for (let i = period - 1 + dPeriod - 1; i < n; i++) {
+    const kSlice = kArr.slice(i - dPeriod + 1, i + 1).filter((v) => v != null);
+    if (kSlice.length === dPeriod) {
+      dArr[i] = Number((kSlice.reduce((a, b) => a + b, 0) / dPeriod).toFixed(1));
+    }
+  }
+
+  return { kArr, dArr };
+}
 
 // Fibonacci retracement levels from the 52-week range.
 // The golden ratio (61.8%) and key levels (38.2%, 50%) are widely watched
@@ -676,6 +699,7 @@ export async function POST(req) {
     const ma200full = smaSeries(closes, 200);
     const macdFull = macdFullSeries(closes);
     const rsiFullSeries = rsiSeriesFull(closes);
+    const stochFull = stochSeriesFull(closes);
     // RSI(9) full series — 2026 dual-RSI standard: shorter period reacts faster to
     // momentum shifts; showing both together lets traders spot early divergences
     // between fast and slow momentum before price confirms a reversal.
@@ -724,6 +748,8 @@ export async function POST(req) {
       macdLineSeries,
       macdSignalSeries,
       rsiSeries: rsiSeriesData,
+      stochKSeries: idx.map((i) => stochFull.kArr[i] ?? null),
+      stochDSeries: idx.map((i) => stochFull.dArr[i] ?? null),
       rsi9Series: rsi9SeriesData,
       adx: adxResult ?? null,
       rsiDivergence: rsiDiv ?? null,
