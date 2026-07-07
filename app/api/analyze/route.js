@@ -295,6 +295,8 @@ function confluenceScore({ rsi, macd, stoch, obv, price, vwap }) {
 }
 
 // Full RSI time-series for charting — O(n²) over a 252-bar daily series is fast enough.
+// Called for both RSI(14) and RSI(9); the 9-period version is the 2026 quant standard
+// for crypto and fast-moving equity, showing momentum changes one bar earlier.
 function rsiSeriesFull(closes, period = 14) {
   const arr = new Array(closes.length).fill(null);
   for (let i = period; i < closes.length; i++) {
@@ -674,6 +676,10 @@ export async function POST(req) {
     const ma200full = smaSeries(closes, 200);
     const macdFull = macdFullSeries(closes);
     const rsiFullSeries = rsiSeriesFull(closes);
+    // RSI(9) full series — 2026 dual-RSI standard: shorter period reacts faster to
+    // momentum shifts; showing both together lets traders spot early divergences
+    // between fast and slow momentum before price confirms a reversal.
+    const rsi9FullSeries = rsiSeriesFull(closes, 9);
     const series = idx.map((i) => closes[i]);
     const ma50 = idx.map((i) => ma50full[i]);
     const ma200 = idx.map((i) => ma200full[i]);
@@ -681,6 +687,7 @@ export async function POST(req) {
     const macdLineSeries = idx.map((i) => macdFull.macdLine[i] ?? null);
     const macdSignalSeries = idx.map((i) => macdFull.signalLine[i] ?? null);
     const rsiSeriesData = idx.map((i) => rsiFullSeries[i] ?? null);
+    const rsi9SeriesData = idx.map((i) => rsi9FullSeries[i] ?? null);
 
     return Response.json({
       name: meta.longName || meta.shortName || sym,
@@ -717,6 +724,7 @@ export async function POST(req) {
       macdLineSeries,
       macdSignalSeries,
       rsiSeries: rsiSeriesData,
+      rsi9Series: rsi9SeriesData,
       adx: adxResult ?? null,
       rsiDivergence: rsiDiv ?? null,
       fibRetracement: fib,

@@ -118,7 +118,11 @@ function MacdHistogramChart({ histSeries, macdLineSeries, macdSignalSeries }) {
   );
 }
 
-function RsiChart({ rsiSeries }) {
+// RSI chart with dual RSI lines — 2026 quant standard: RSI(14) as the primary
+// trend-momentum read (solid line) and RSI(9) as the fast confirmation signal
+// (dotted). When both cross overbought/oversold together the signal is stronger;
+// divergence between the two is an early warning that a move is losing momentum.
+function RsiChart({ rsiSeries, rsi9Series }) {
   const W = 700, H = 60, pad = 10, n = rsiSeries.length;
   if (n < 2) return null;
   const valid = rsiSeries.filter(v => v != null);
@@ -126,11 +130,17 @@ function RsiChart({ rsiSeries }) {
   const x = (i) => pad + (i / (n - 1)) * (W - 2 * pad);
   const y = (v) => pad + (1 - v / 100) * (H - 2 * pad);
   const y30 = y(30), y70 = y(70), y50 = y(50);
-  let d = "", pen = false;
+  let d14 = "", pen14 = false;
   rsiSeries.forEach((v, i) => {
-    if (v == null) { pen = false; return; }
-    d += `${pen ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)} `;
-    pen = true;
+    if (v == null) { pen14 = false; return; }
+    d14 += `${pen14 ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)} `;
+    pen14 = true;
+  });
+  let d9 = "", pen9 = false;
+  (rsi9Series || []).forEach((v, i) => {
+    if (v == null) { pen9 = false; return; }
+    d9 += `${pen9 ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)} `;
+    pen9 = true;
   });
   const last = valid[valid.length - 1];
   const lineColor = last >= 70 ? T.neg : last <= 30 ? T.pos : T.accent;
@@ -140,7 +150,8 @@ function RsiChart({ rsiSeries }) {
       <line x1={pad} y1={y70} x2={W - pad} y2={y70} stroke={T.neg} strokeWidth="0.7" strokeDasharray="3 3" opacity="0.5" />
       <line x1={pad} y1={y50} x2={W - pad} y2={y50} stroke={T.line} strokeWidth="0.6" opacity="0.6" />
       <line x1={pad} y1={y30} x2={W - pad} y2={y30} stroke={T.pos} strokeWidth="0.7" strokeDasharray="3 3" opacity="0.5" />
-      <path d={d} fill="none" stroke={lineColor} strokeWidth="1.6" strokeLinejoin="round" />
+      {d9 && <path d={d9} fill="none" stroke={lineColor} strokeWidth="1" strokeDasharray="3 2" strokeLinejoin="round" opacity="0.55" />}
+      <path d={d14} fill="none" stroke={lineColor} strokeWidth="1.6" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -473,7 +484,7 @@ export default function StockAdvisor() {
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 18, borderTop: `1.5px dashed ${T.neg}`, display: "inline-block" }} /> 70 overbought</span>
                     </span>
                   </div>
-                  <RsiChart rsiSeries={result.rsiSeries} />
+                  <RsiChart rsiSeries={result.rsiSeries} rsi9Series={result.rsi9Series} />
                 </div>
               )}
               {/* Stochastic + volume row */}
