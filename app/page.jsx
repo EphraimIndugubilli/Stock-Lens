@@ -635,61 +635,76 @@ export default function StockAdvisor() {
                   </div>
                 );
               })()}
-              {/* Fibonacci retracement levels */}
-              {result.fibRetracement && result.fibRetracement.levels && (
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ background: T.bg, borderRadius: 9, padding: "12px 14px" }}>
+              {result.fibRetracement && result.fibRetracement.levels && (() => {
+                const fib = result.fibRetracement;
+                const keyRatios = [0.236, 0.382, 0.5, 0.618, 0.786];
+                const price52Low  = fib.levels[0].value;
+                const price52High = fib.levels[fib.levels.length - 1].value;
+                const priceRange  = price52High - price52Low;
+                const priceNum = typeof result.price === "string"
+                  ? parseFloat(result.price.replace(/[₹,\s]/g, ""))
+                  : result.price;
+                return (
+                  <div style={{ marginTop: 10, background: T.bg, borderRadius: 9, padding: "12px 14px" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
                       <div>
                         <div style={{ fontSize: 11, color: T.muted }}>Fibonacci Retracement — 52-week range</div>
-                        <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
-                          Zone: <span style={{ fontFamily: T.mono, color: T.ink }}>{result.fibRetracement.zone}</span>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, marginTop: 2 }}>
+                          Zone: <span style={{ fontFamily: T.mono, color: T.accent }}>{fib.zone}</span>
+                          {fib.nearKey && (
+                            <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, color: T.warn, background: T.warn + "18", borderRadius: 4, padding: "2px 6px" }}>
+                              Near {fib.nearKey.label} golden zone
+                            </span>
+                          )}
                         </div>
                       </div>
-                      {result.fibRetracement.nearKey && (
-                        <div style={{ background: T.warn + "18", border: `1px solid ${T.warn}40`, borderRadius: 7, padding: "5px 10px" }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: T.warn }}>
-                            Near {result.fibRetracement.nearKey.label} ({result.fibRetracement.nearKey.value != null ? result.fibRetracement.nearKey.value.toLocaleString("en-IN") : "—"})
-                          </span>
-                        </div>
-                      )}
+                      <div style={{ display: "flex", gap: 12, fontSize: 11, color: T.muted }}>
+                        {fib.support && <span>Support: <span style={{ fontFamily: T.mono, color: T.pos }}>{fib.support.label}</span></span>}
+                        {fib.resistance && <span>Resist: <span style={{ fontFamily: T.mono, color: T.neg }}>{fib.resistance.label}</span></span>}
+                      </div>
                     </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 6 }}>
-                      {result.fibRetracement.levels.map((lvl) => {
+                    {/* Range bar with Fibonacci level markers */}
+                    <div style={{ position: "relative", height: 36, background: T.surface, borderRadius: 6, overflow: "hidden", marginBottom: 10 }}>
+                      {fib.levels.filter(l => keyRatios.includes(l.ratio)).map(l => {
+                        const pct = priceRange > 0 ? ((l.value - price52Low) / priceRange) * 100 : 0;
+                        const isGolden = l.ratio === 0.618;
+                        return (
+                          <div key={l.label} style={{ position: "absolute", left: `${pct}%`, top: 0, bottom: 0, display: "flex", flexDirection: "column", alignItems: "center" }}>
+                            <div style={{ width: 1, height: "100%", background: isGolden ? T.warn : T.line, opacity: isGolden ? 0.9 : 0.5 }} />
+                            <span style={{ position: "absolute", top: 4, fontSize: 9, color: isGolden ? T.warn : T.muted, transform: "translateX(-50%)", whiteSpace: "nowrap" }}>{l.label}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* Per-level detail grid */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(105px, 1fr))", gap: 6 }}>
+                      {fib.levels.map((lvl) => {
                         const isKey = [0.382, 0.5, 0.618, 0.786].includes(lvl.ratio);
-                        const isNear = result.fibRetracement.nearKey && lvl.ratio === result.fibRetracement.nearKey.ratio;
-                        const priceNum = typeof result.price === "string"
-                          ? parseFloat(result.price.replace(/[₹,\s]/g, ""))
-                          : result.price;
-                        const isCurrent = lvl.value != null && priceNum != null &&
-                          priceNum >= lvl.value &&
-                          result.fibRetracement.levels.findIndex((l) => l.value > priceNum) === result.fibRetracement.levels.indexOf(lvl) + 1;
+                        const isNear = fib.nearKey && lvl.ratio === fib.nearKey.ratio;
                         const above = lvl.value != null && priceNum != null && lvl.value > priceNum;
                         return (
                           <div key={lvl.label} style={{
                             background: isNear ? T.warn + "18" : T.surface,
                             border: `1px solid ${isNear ? T.warn : T.line}`,
-                            borderRadius: 7,
-                            padding: "7px 10px",
-                            opacity: isKey ? 1 : 0.7,
+                            borderRadius: 7, padding: "6px 9px", opacity: isKey ? 1 : 0.7,
                           }}>
                             <div style={{ fontSize: 10, color: isNear ? T.warn : T.muted, fontWeight: isKey ? 600 : 400 }}>
                               {lvl.label}{isKey ? " ★" : ""}
                             </div>
-                            <div style={{ fontFamily: T.mono, fontSize: 12.5, marginTop: 2, color: above ? T.neg : T.pos }}>
+                            <div style={{ fontFamily: T.mono, fontSize: 12, marginTop: 2, color: above ? T.neg : T.pos }}>
                               {lvl.value != null ? lvl.value.toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "—"}
                             </div>
-                            <div style={{ fontSize: 9.5, color: T.muted, marginTop: 1 }}>{above ? "resistance ↑" : "support ↓"}</div>
+                            <div style={{ fontSize: 9, color: T.muted, marginTop: 1 }}>{above ? "resistance ↑" : "support ↓"}</div>
                           </div>
                         );
                       })}
                     </div>
                     <div style={{ fontSize: 11, color: T.muted, marginTop: 8 }}>
-                      Key Fibonacci levels (★) — 38.2%, 50%, 61.8%, 78.6% — act as support/resistance zones widely watched by Indian retail traders on Groww and TradingView.
+                      Key levels (★) — 38.2%, 50%, 61.8%, 78.6% — are the most-watched swing trade zones on TradingView. 61.8% (golden ratio) is typically the strongest reversal point.
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
               <div style={{ fontSize: 11, color: T.muted, marginTop: 12, fontStyle: "italic" }}>{result.asOf} · prices may be delayed</div>
             </div>
 
