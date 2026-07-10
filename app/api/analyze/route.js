@@ -496,6 +496,76 @@ function rsiDivergence(closes, period = 14, swingLookback = 5) {
   return { type: 'none' };
 }
 
+// Ichimoku Cloud — the most widely used multi-component trend system in 2026
+// for NSE/BSE traders on Zerodha and TradingView. Five components together give
+// support/resistance, momentum, and trend direction in one glance:
+//   Tenkan-sen (9):  fast mid-price — short-term momentum pivot
+//   Kijun-sen (26):  slow mid-price — medium-term trend baseline
+//   Senkou Span A:   avg of Tenkan + Kijun, leading 26 periods — cloud top/bottom
+//   Senkou Span B:   52-period mid-price, leading 26 periods — cloud depth
+//   Chikou Span:     current close plotted 26 periods back — lagging confirmation
+// Requires actual high/low arrays (extracted from Yahoo Finance alongside close).
+function ichimoku(closes, highs, lows) {
+  if (!highs || !lows || closes.length < 52 || highs.length < 52 || lows.length < 52) return null;
+  const len = Math.min(closes.length, highs.length, lows.length);
+
+  const midpoint = (hiArr, loArr, period, fromEnd) => {
+    const end = fromEnd;
+    const start = end - period;
+    if (start < 0) return null;
+    const sliceHi = hiArr.slice(start, end);
+    const sliceLo = loArr.slice(start, end);
+    return (Math.max(...sliceHi) + Math.min(...sliceLo)) / 2;
+  };
+
+  const tenkan = midpoint(highs, lows, 9,  len);
+  const kijun  = midpoint(highs, lows, 26, len);
+  const spanB  = midpoint(highs, lows, 52, len);
+  if (tenkan == null || kijun == null || spanB == null) return null;
+
+  const spanA = (tenkan + kijun) / 2;
+
+  const price = closes[len - 1];
+  const cloudTop    = Math.max(spanA, spanB);
+  const cloudBottom = Math.min(spanA, spanB);
+  const aboveCloud  = price > cloudTop;
+  const belowCloud  = price < cloudBottom;
+  const inCloud     = !aboveCloud && !belowCloud;
+  const bullishCloud = spanA >= spanB; // green cloud (A above B) = bullish structure
+
+  // Tenkan/Kijun cross — TK cross above cloud is the strongest buy signal
+  const tkBullish = tenkan > kijun;
+
+  // Chikou: current close vs close 26 bars ago
+  const chikou26 = len > 26 ? closes[len - 27] : null;
+  const chikouBullish = chikou26 != null ? price > chikou26 : null;
+
+  // Signal summary — all 5 components bullish = "strong bullish" in Ichimoku theory
+  const bullSignals = [aboveCloud, tkBullish, bullishCloud, chikouBullish === true].filter(Boolean).length;
+  const bearSignals = [belowCloud, !tkBullish, !bullishCloud, chikouBullish === false].filter(Boolean).length;
+  const signal = bullSignals >= 3 ? 'strong_bullish'
+               : bearSignals >= 3 ? 'strong_bearish'
+               : aboveCloud       ? 'bullish'
+               : belowCloud       ? 'bearish'
+               : 'neutral';
+
+  return {
+    tenkan:   Number(tenkan.toFixed(2)),
+    kijun:    Number(kijun.toFixed(2)),
+    spanA:    Number(spanA.toFixed(2)),
+    spanB:    Number(spanB.toFixed(2)),
+    aboveCloud,
+    belowCloud,
+    inCloud,
+    bullishCloud,
+    tkBullish,
+    chikouBullish,
+    signal,
+    bullSignals,
+    bearSignals,
+  };
+}
+
 function downIdx(len, target = 150) {
   if (len <= target) return [...Array(len).keys()];
   const stride = len / target, out = [];
@@ -511,7 +581,7 @@ export async function POST(req) {
       return Response.json({ error: "Enter a stock name or NSE ticker." }, { status: 400 });
     const sym = String(symbol).trim().toUpperCase().replace(/\s+/g, "");
 
-    let meta = null, closes = [], volumes = [];
+    let meta = null, closes = [], volumes = [], highs = [], lows = [];
     for (const v of [`${sym}.NS`, `${sym}.BO`, sym]) {
       try {
         const r = await fetch(
@@ -522,11 +592,20 @@ export async function POST(req) {
         const j = await r.json();
         const res = j?.chart?.result?.[0];
         const quote = res?.indicators?.quote?.[0];
-        const c = quote?.close;
-        if (res?.meta?.regularMarketPrice && Array.isArray(c)) {
+        const rawClose = quote?.close;
+        if (res?.meta?.regularMarketPrice && Array.isArray(rawClose)) {
           meta = res.meta;
-          closes = c.filter((x) => x != null);
-          volumes = (quote?.volume || []).filter((x) => x != null);
+          const rawHigh = quote?.high || [];
+          const rawLow  = quote?.low  || [];
+          const rawVol  = quote?.volume || [];
+          const aligned = rawClose.reduce((acc, c, i) => {
+            if (c != null) acc.push({ c, h: rawHigh[i] ?? c, l: rawLow[i] ?? c, v: rawVol[i] ?? 0 });
+            return acc;
+          }, []);
+          closes  = aligned.map(x => x.c);
+          highs   = aligned.map(x => x.h);
+          lows    = aligned.map(x => x.l);
+          volumes = aligned.map(x => x.v);
           break;
         }
       } catch {}
@@ -563,6 +642,7 @@ export async function POST(req) {
     const stResult = superTrend(closes);
     const adxResult = adx(closes);
     const rsiDiv = rsiDivergence(closes);
+    const ichimokuResult = ichimoku(closes, highs, lows);
 
     // Trend determination
     let trend = "Range-bound", trendColor = "warn";
@@ -668,6 +748,30 @@ export async function POST(req) {
       concerns.push(`Bearish RSI divergence: price made a higher high but RSI weakened (strength −${rsiDiv.strength}%) — momentum is fading despite the price advance, a leading reversal warning.`);
     }
 
+    // Ichimoku Cloud signals — 2026 most popular multi-component trend system
+    // on NSE/BSE for both swing and position traders. Five components together
+    // give a more complete trend picture than any single oscillator.
+    if (ichimokuResult) {
+      const ichi = ichimokuResult;
+      const fmtI = (n) => (n == null ? 'N/A' : cur + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 }));
+      if (ichi.signal === 'strong_bullish') {
+        strengths.push(`Ichimoku Cloud strong bullish: price above cloud, TK cross bullish, cloud green (${ichi.bullSignals}/4 components confirm) — Kijun support at ${fmtI(ichi.kijun)}.`);
+      } else if (ichi.signal === 'bullish') {
+        strengths.push(`Ichimoku Cloud bullish: price above the cloud (top ${fmtI(Math.max(ichi.spanA, ichi.spanB))}) — medium-term uptrend structure intact.`);
+      } else if (ichi.signal === 'strong_bearish') {
+        concerns.push(`Ichimoku Cloud strong bearish: price below cloud, TK cross bearish (${ichi.bearSignals}/4 components confirm) — Kijun resistance at ${fmtI(ichi.kijun)}.`);
+      } else if (ichi.signal === 'bearish') {
+        concerns.push(`Ichimoku Cloud bearish: price below the cloud (bottom ${fmtI(Math.min(ichi.spanA, ichi.spanB))}) — downtrend structure in place.`);
+      } else if (ichi.inCloud) {
+        concerns.push(`Price inside Ichimoku Cloud (${fmtI(Math.min(ichi.spanA, ichi.spanB))}–${fmtI(Math.max(ichi.spanA, ichi.spanB))}) — consolidation zone, wait for a clear breakout before trading direction.`);
+      }
+      if (ichi.tkBullish && ichi.aboveCloud) {
+        strengths.push(`Tenkan-sen (${fmtI(ichi.tenkan)}) above Kijun-sen (${fmtI(ichi.kijun)}) above cloud — classic Ichimoku bullish alignment.`);
+      } else if (!ichi.tkBullish && ichi.belowCloud) {
+        concerns.push(`Tenkan-sen (${fmtI(ichi.tenkan)}) below Kijun-sen (${fmtI(ichi.kijun)}) below cloud — classic Ichimoku bearish alignment.`);
+      }
+    }
+
     if (!strengths.length) strengths.push("No standout positive signals right now.");
     if (!concerns.length) concerns.push("No major technical red flags right now.");
 
@@ -754,6 +858,7 @@ export async function POST(req) {
       adx: adxResult ?? null,
       rsiDivergence: rsiDiv ?? null,
       fibRetracement: fib,
+      ichimoku: ichimokuResult ?? null,
       superTrend: stResult ? {
         value:      stResult.value,
         direction:  stResult.direction,
