@@ -230,10 +230,16 @@ export default function StockAdvisor() {
         e.preventDefault();
         inputRef.current?.focus();
       }
+      if (e.key === "Escape" && result) {
+        setResult(null);
+        setError("");
+        setSymbol("");
+        inputRef.current?.focus();
+      }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [result]);
 
   async function analyze(sym) {
     const q = (sym || symbol).trim();
@@ -326,6 +332,11 @@ export default function StockAdvisor() {
 
         {result && (
           <div className="sa-fade" style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <kbd style={{ fontSize: 11, color: T.muted, background: T.bg, border: `1px solid ${T.line}`, borderRadius: 4, padding: "1px 5px", fontFamily: T.mono, cursor: "pointer" }}
+                onClick={() => { setResult(null); setError(""); setSymbol(""); inputRef.current?.focus(); }}
+                title="Clear results">Esc to clear</kbd>
+            </div>
             {/* Snapshot + chart */}
             <div className="sa-card" style={{ padding: 18 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
