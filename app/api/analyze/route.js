@@ -215,6 +215,34 @@ function onBalanceVolume(closes, volumes) {
   return { current, formatted: fmt, trend };
 }
 
+// Money Flow Index — volume-weighted RSI using Typical Price (H+L+C)/3.
+// MFI > 80 = overbought/distribution; MFI < 20 = oversold/accumulation.
+// 2026 trend: MFI is the preferred "volume-momentum" oscillator — it
+// combines price direction AND volume so a divergence that RSI misses
+// (price up but volume shrinking) shows up here first.
+function mfi(closes, highs, lows, volumes, period = 14) {
+  const len = Math.min(closes.length, highs.length, lows.length, volumes.length);
+  if (len < period + 1) return null;
+
+  const from = len - (period + 1);
+  const tp = [];
+  for (let i = from; i < len; i++) {
+    tp.push((highs[i] + lows[i] + closes[i]) / 3);
+  }
+  const vol = volumes.slice(from, len);
+
+  let posFlow = 0, negFlow = 0;
+  for (let i = 1; i < tp.length; i++) {
+    const mf = tp[i] * (vol[i] ?? 0);
+    if      (tp[i] > tp[i - 1]) posFlow += mf;
+    else if (tp[i] < tp[i - 1]) negFlow += mf;
+  }
+
+  if (negFlow === 0) return 100;
+  if (posFlow === 0) return 0;
+  return parseFloat((100 - 100 / (1 + posFlow / negFlow)).toFixed(2));
+}
+
 // Rolling 20-period VWAP (Volume-Weighted Average Price).
 // Uses close as the typical price — a standard daily approximation.
 // Price above VWAP = institutional demand; below = distribution pressure.
@@ -272,9 +300,10 @@ function macdHistogramSeries(closes) {
 
 // 2026 quant best practice: don't trust any single oscillator — only flag a
 // strong signal when a majority of independent indicators agree on direction.
-// Checks RSI, MACD, Stochastic, OBV and VWAP and counts how many vote bullish
-// vs bearish.
-function confluenceScore({ rsi, macd, stoch, obv, price, vwap }) {
+// Checks RSI, MACD, Stochastic, OBV, VWAP, and MFI and counts how many vote
+// bullish vs bearish.  MFI is a 6th leg: volume-weighted momentum that fires
+// on institutional accumulation/distribution the other oscillators can miss.
+function confluenceScore({ rsi, macd, stoch, obv, price, vwap, mfi }) {
   const votes = [];
   // RSI > 50: recent gains > losses = bullish momentum; < 50 = bearish momentum.
   if (rsi != null) votes.push(rsi > 50 ? "bull" : rsi < 50 ? "bear" : null);
@@ -283,6 +312,8 @@ function confluenceScore({ rsi, macd, stoch, obv, price, vwap }) {
   if (stoch) votes.push(stoch.k > 50 ? "bull" : stoch.k < 50 ? "bear" : null);
   if (obv) votes.push(obv.trend === "rising" ? "bull" : obv.trend === "falling" ? "bear" : null);
   if (vwap != null) votes.push(price > vwap ? "bull" : "bear");
+  // MFI > 50: positive money flow (more volume on up-days); < 50 = distribution.
+  if (mfi != null) votes.push(mfi > 50 ? "bull" : mfi < 50 ? "bear" : null);
 
   const cast = votes.filter(Boolean);
   const bullCount = cast.filter((v) => v === "bull").length;
@@ -637,6 +668,7 @@ export async function POST(req) {
     const stoch = stochastic(closes);
     const volTrend = volumeTrend(volumes);
     const obvResult = onBalanceVolume(closes, volumes);
+    const mfiResult = mfi(closes, highs, lows, volumes);
     const vwapRaw = rollingVwap(closes, volumes);
     const fib = fibRetracement(low52, high52, price);
     const stResult = superTrend(closes);
@@ -682,6 +714,10 @@ export async function POST(req) {
     if (volTrend?.aboveAvg && dayChangePct < 0) concerns.push(`Volume ${volTrend.ratio}x the 20-day average on a down day — heavy selling pressure.`);
     if (obvResult?.trend === 'rising') strengths.push('OBV (On-Balance Volume) trending up — cumulative buying pressure confirmed.');
     if (obvResult?.trend === 'falling') concerns.push('OBV (On-Balance Volume) trending down — cumulative selling pressure detected.');
+    if (mfiResult !== null && mfiResult <= 20) strengths.push(`MFI ${mfiResult} — deeply oversold on a volume-weighted basis; historically a high-probability reversal zone.`);
+    else if (mfiResult !== null && mfiResult <= 35) strengths.push(`MFI ${mfiResult} — money flow oversold; positive volume divergence building.`);
+    else if (mfiResult !== null && mfiResult >= 80) concerns.push(`MFI ${mfiResult} — overbought on volume-weighted basis; institutional distribution likely.`);
+    else if (mfiResult !== null && mfiResult >= 65) concerns.push(`MFI ${mfiResult} — money flow elevated; watch for distribution as smart money unwinds.`);
     if (vwapRaw !== null && price > vwapRaw) strengths.push(`Price above 20-day VWAP (${fmt(vwapRaw)}) — volume-weighted consensus favours buyers.`);
     if (vwapRaw !== null && price <= vwapRaw) concerns.push(`Price below 20-day VWAP (${fmt(vwapRaw)}) — sellers dominate the volume-weighted average.`);
 
@@ -796,7 +832,7 @@ export async function POST(req) {
 
     const fundamental = `50-day avg ${fmt(s50)}, 200-day avg ${fmt(s200)}, EMA-21 ${fmt(e21)}. Bollinger Bands: ${bb ? `${fmt(bb.lower)} – ${fmt(bb.upper)}` : "N/A"}. (This tool shows price data only — check Groww for earnings & fundamentals.)`;
 
-    const confluence = confluenceScore({ rsi: r14, macd: macdResult, stoch, obv: obvResult, price, vwap: vwapRaw });
+    const confluence = confluenceScore({ rsi: r14, macd: macdResult, stoch, obv: obvResult, price, vwap: vwapRaw, mfi: mfiResult });
 
     const idx = downIdx(closes.length);
     const ma50full = smaSeries(closes, 50);
@@ -844,6 +880,7 @@ export async function POST(req) {
       stochastic: stoch,
       volumeTrend: volTrend,
       obv: obvResult,
+      mfi: mfiResult,
       confluence,
       vwap: vwapRaw != null ? fmt(vwapRaw) : null,
       vwapAbove: vwapRaw != null ? price > vwapRaw : null,
