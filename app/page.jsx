@@ -221,12 +221,16 @@ export default function StockAdvisor() {
   const [history, setHistory] = useState(() => {
     try { return JSON.parse(localStorage.getItem("sl_history") || "[]"); } catch { return []; }
   });
+  const [historyIndex, setHistoryIndex] = useState(-1);
   const inputRef = useRef(null);
   const abortRef = useRef(null);
 
   useEffect(() => {
     function onKeyDown(e) {
-      if (e.key === "/" && document.activeElement !== inputRef.current) {
+      if (
+        (e.key === "/" && document.activeElement !== inputRef.current) ||
+        (e.key === "k" && (e.ctrlKey || e.metaKey))
+      ) {
         e.preventDefault();
         inputRef.current?.focus();
       }
@@ -234,6 +238,7 @@ export default function StockAdvisor() {
         setResult(null);
         setError("");
         setSymbol("");
+        setHistoryIndex(-1);
         inputRef.current?.focus();
       }
     }
@@ -304,12 +309,28 @@ export default function StockAdvisor() {
         <div className="sa-card" style={{ padding: 18 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <label style={{ fontSize: 12, fontWeight: 600, color: T.muted, textTransform: "uppercase", letterSpacing: ".05em" }}>Company or NSE ticker</label>
-            <kbd style={{ fontSize: 11, color: T.muted, background: T.bg, border: `1px solid ${T.line}`, borderRadius: 4, padding: "1px 5px", fontFamily: T.mono }}>press / to search</kbd>
+            <kbd style={{ fontSize: 11, color: T.muted, background: T.bg, border: `1px solid ${T.line}`, borderRadius: 4, padding: "1px 5px", fontFamily: T.mono }}>/ or ⌘K · ↑↓ history</kbd>
           </div>
           <div style={{ position: "relative", marginTop: 8 }}>
             <Search size={17} color={T.muted} style={{ position: "absolute", left: 12, top: 13 }} />
-            <input ref={inputRef} className="sa-in" value={symbol} onChange={(e) => setSymbol(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && analyze()} placeholder="e.g. RELIANCE, TCS, INFY"
+            <input ref={inputRef} className="sa-in" value={symbol}
+              onChange={(e) => { setSymbol(e.target.value); setHistoryIndex(-1); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { analyze(); return; }
+                if (history.length === 0) return;
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  const next = Math.min(historyIndex + 1, history.length - 1);
+                  setHistoryIndex(next);
+                  setSymbol(history[next]);
+                }
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  if (historyIndex <= 0) { setHistoryIndex(-1); setSymbol(""); }
+                  else { const next = historyIndex - 1; setHistoryIndex(next); setSymbol(history[next]); }
+                }
+              }}
+              placeholder="e.g. RELIANCE, TCS, INFY"
               style={{ width: "100%", padding: "11px 12px 11px 36px", border: `1px solid ${T.line}`, borderRadius: 10, fontFamily: T.body, fontSize: 14.5, background: T.bg, color: T.ink }} />
           </div>
           <button className="sa-btn" onClick={() => analyze()} disabled={loading}
