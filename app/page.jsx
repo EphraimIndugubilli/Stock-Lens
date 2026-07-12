@@ -495,6 +495,71 @@ export default function StockAdvisor() {
                   </div>
                 </div>
               )}
+              {/* Ichimoku Cloud */}
+              {result.ichimoku && (() => {
+                const ic = result.ichimoku;
+                const isBull = ic.signal === "strong_bullish" || ic.signal === "bullish";
+                const isBear = ic.signal === "strong_bearish" || ic.signal === "bearish";
+                const isStrong = ic.signal === "strong_bullish" || ic.signal === "strong_bearish";
+                const icColor = isBull ? T.pos : isBear ? T.neg : T.warn;
+                const icLabel = ic.signal === "strong_bullish" ? "Strong Bullish"
+                  : ic.signal === "bullish" ? "Bullish"
+                  : ic.signal === "strong_bearish" ? "Strong Bearish"
+                  : ic.signal === "bearish" ? "Bearish"
+                  : "Neutral / Cloud";
+                const cloudPos = ic.aboveCloud ? "Price above cloud ▲"
+                  : ic.belowCloud ? "Price below cloud ▼"
+                  : "Price inside cloud ↔";
+                const confirms = isBull ? ic.bullSignals : isBear ? ic.bearSignals : 0;
+                const fmt2 = (v) => v != null ? Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "—";
+                return (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ background: icColor + "12", border: `1px solid ${icColor}40`, borderRadius: 9, padding: "12px 14px" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 11, color: T.muted }}>Ichimoku Cloud (9/26/52)</div>
+                          <div style={{ fontFamily: T.mono, fontSize: 15, marginTop: 3, color: icColor }}>{cloudPos}</div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, background: icColor + "22", borderRadius: 7, padding: "5px 10px" }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: icColor }}>
+                              {isBull ? "▲" : isBear ? "▼" : "↔"} {icLabel}
+                            </span>
+                          </div>
+                          {isStrong && (
+                            <span style={{ fontSize: 10, fontWeight: 600, color: icColor, background: icColor + "18", borderRadius: 4, padding: "2px 7px" }}>
+                              {confirms}/4 signals
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 10 }}>
+                        <div style={{ background: T.surface, borderRadius: 7, padding: "7px 10px" }}>
+                          <div style={{ fontSize: 10, color: T.muted }}>Tenkan-sen</div>
+                          <div style={{ fontFamily: T.mono, fontSize: 12, marginTop: 2, color: ic.tkBullish ? T.pos : T.neg }}>{fmt2(ic.tenkan)}</div>
+                        </div>
+                        <div style={{ background: T.surface, borderRadius: 7, padding: "7px 10px" }}>
+                          <div style={{ fontSize: 10, color: T.muted }}>Kijun-sen</div>
+                          <div style={{ fontFamily: T.mono, fontSize: 12, marginTop: 2 }}>{fmt2(ic.kijun)}</div>
+                        </div>
+                        <div style={{ background: T.surface, borderRadius: 7, padding: "7px 10px" }}>
+                          <div style={{ fontSize: 10, color: T.muted }}>Cloud ({ic.aboveCloud ? "support" : ic.belowCloud ? "resistance" : "range"})</div>
+                          <div style={{ fontFamily: T.mono, fontSize: 12, marginTop: 2 }}>{fmt2(Math.min(ic.spanA, ic.spanB))} – {fmt2(Math.max(ic.spanA, ic.spanB))}</div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11, color: T.muted, marginTop: 8 }}>
+                        {ic.inCloud
+                          ? "Price is inside the Ichimoku Cloud — consolidation zone. Wait for a decisive close above or below the cloud before committing to direction."
+                          : ic.aboveCloud && ic.tkBullish
+                          ? "Price above cloud with Tenkan above Kijun — classic Ichimoku bullish alignment. Cloud acts as dynamic support."
+                          : ic.belowCloud && !ic.tkBullish
+                          ? "Price below cloud with Tenkan below Kijun — classic Ichimoku bearish alignment. Cloud acts as dynamic resistance."
+                          : "Ichimoku components partially aligned — one or more conditions diverge from the main signal."}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
               {/* MACD row */}
               {result.macd && (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
