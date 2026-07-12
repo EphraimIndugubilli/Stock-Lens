@@ -802,6 +802,40 @@ export default function StockAdvisor() {
                   </div>
                 );
               })()}
+              {result.williamsR && (() => {
+                const wr = result.williamsR;
+                const wrColor = wr.oversold ? T.pos : wr.overbought ? T.neg : T.muted;
+                const wrLabel = wr.oversold ? "Oversold — bounce zone" : wr.overbought ? "Overbought — exhaustion" : "Neutral";
+                const wrBarPct = Math.round(((wr.value + 100) / 100) * 100);
+                return (
+                  <div style={{ marginTop: 10, background: T.bg, borderRadius: 9, padding: "10px 12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: T.muted }}>Williams %R (14)</div>
+                        <div style={{ fontFamily: T.mono, fontSize: 15, marginTop: 3, color: wrColor }}>{wr.value}</div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, background: wrColor + "18", borderRadius: 7, padding: "5px 10px" }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: wrColor }}>{wrLabel}</span>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: T.muted, marginBottom: 3 }}>
+                        <span>−100 oversold</span><span>−50 neutral</span><span>0 overbought</span>
+                      </div>
+                      <div style={{ height: 5, background: T.line, borderRadius: 4, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${wrBarPct}%`, background: wrColor, borderRadius: 4, transition: "width 0.4s" }} />
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>
+                      {wr.oversold
+                        ? "Price near the period low — mean-reversion bounce likely, especially when confirmed by rising OBV."
+                        : wr.overbought
+                        ? "Price near the period high — exhaustion warning; fading volume at this level often precedes a pullback."
+                        : "Williams %R in neutral zone — no momentum extreme signal currently."}
+                    </div>
+                  </div>
+                );
+              })()}
               <div style={{ fontSize: 11, color: T.muted, marginTop: 12, fontStyle: "italic" }}>{result.asOf} · prices may be delayed</div>
             </div>
 

@@ -597,6 +597,30 @@ function ichimoku(closes, highs, lows) {
   };
 }
 
+// Williams %R — 2026 quant research ranks this as the top momentum oscillator
+// for fast-moving NSE/BSE stocks because it uses the true high-low range of the
+// lookback period (not just closing prices), making it more sensitive to intraday
+// extremes than RSI. Ranges from -100 (most oversold) to 0 (most overbought).
+// Overbought: -20 to 0 → expect mean reversion downward.
+// Oversold:  -100 to -80 → expect mean reversion upward.
+// Particularly effective at spotting exhaustion moves when confirmed by volume.
+function williamsR(closes, highs, lows, period = 14) {
+  if (!highs || !lows) return null;
+  const len = Math.min(closes.length, highs.length, lows.length);
+  if (len < period) return null;
+  const sliceHi = highs.slice(len - period, len);
+  const sliceLo = lows.slice(len - period, len);
+  const hh = Math.max(...sliceHi);
+  const ll = Math.min(...sliceLo);
+  if (hh === ll) return { value: -50, overbought: false, oversold: false };
+  const value = Number((((hh - closes[len - 1]) / (hh - ll)) * -100).toFixed(1));
+  return {
+    value,
+    overbought: value >= -20,
+    oversold:   value <= -80,
+  };
+}
+
 function downIdx(len, target = 150) {
   if (len <= target) return [...Array(len).keys()];
   const stride = len / target, out = [];
@@ -675,6 +699,7 @@ export async function POST(req) {
     const adxResult = adx(closes);
     const rsiDiv = rsiDivergence(closes);
     const ichimokuResult = ichimoku(closes, highs, lows);
+    const williamsRResult = williamsR(closes, highs, lows);
 
     // Trend determination
     let trend = "Range-bound", trendColor = "warn";
@@ -808,6 +833,16 @@ export async function POST(req) {
       }
     }
 
+    // Williams %R signals — uses the true high-low range of the period so it
+    // catches exhaustion moves earlier than close-only oscillators like RSI.
+    if (williamsRResult) {
+      const wr = williamsRResult.value;
+      if (williamsRResult.oversold)
+        strengths.push(`Williams %R at ${wr} (oversold below −80) — price trading near period low; mean-reversion bounce zone, especially if OBV diverges positive.`);
+      else if (williamsRResult.overbought)
+        concerns.push(`Williams %R at ${wr} (overbought above −20) — price trading near period high; exhaustion warning, watch for reversal especially if volume fades.`);
+    }
+
     if (!strengths.length) strengths.push("No standout positive signals right now.");
     if (!concerns.length) concerns.push("No major technical red flags right now.");
 
@@ -896,6 +931,7 @@ export async function POST(req) {
       rsiDivergence: rsiDiv ?? null,
       fibRetracement: fib,
       ichimoku: ichimokuResult ?? null,
+      williamsR: williamsRResult ?? null,
       superTrend: stResult ? {
         value:      stResult.value,
         direction:  stResult.direction,
